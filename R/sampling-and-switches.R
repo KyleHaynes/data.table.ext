@@ -44,6 +44,8 @@ set_null <- function(x, cols) {
 #' If `group` is provided, samples `n` unique group values and returns all rows
 #' for those selected groups. The output is ordered by `group` and tagged for
 #' grouped-print separators when used with `enable_dt_print_thousands()`.
+#' When `sort_coverage = TRUE` (default), rows are sorted by value commonality
+#' (most frequent values first) within each selected group.
 #'
 #' @param dt A data.table to sample from.
 #' @param n Integer sample size. Row count when `group = NULL`; number of
@@ -54,8 +56,9 @@ set_null <- function(x, cols) {
 #'   print output colors distinct character/factor values by default (distinct
 #'   mode). If needed, this will also auto-enable
 #'   `enable_dt_print_thousands()` so coloring appears immediately.
-#' @param sort_coverage Logical scalar. If `TRUE` (default), sort sampled rows
-#'   so rows sharing more column values with other sampled rows are shown first.
+#' @param sort_coverage Logical scalar. If `TRUE` (default), sort rows by
+#'   commonality within each selected group: rows with more frequent values
+#'   appear first. Only applies when `group` is supplied.
 #'
 #' @return A data.table. If `group` is supplied, returned rows include all
 #'   members of selected groups and include print attribute
@@ -90,14 +93,7 @@ sample_dt <- function(dt, n = 10, group = NULL, color = .sample_dt_color_default
     if (!has_group) {
         n_take <- min(n, nr)
         idx <- sample.int(nr, n_take)
-        ans <- dt[idx]
-        if (isTRUE(sort_coverage) && nrow(ans) > 1L) {
-            coverage_score <- .coverage_sort_score(ans)
-            ans[, `..coverage_score` := coverage_score]
-            ans[, `..sample_order` := seq_len(.N)]
-            data.table::setorderv(ans, c("..coverage_score", "..sample_order"), order = c(-1L, 1L))
-            ans[, c("..coverage_score", "..sample_order") := NULL]
-        }
+        ans <- dt[idx, ]
         setattr(ans, ".group_print_color_values", isTRUE(color))
         if (isTRUE(color)) {
             setattr(ans, ".group_print_value_mode", "distinct")
@@ -126,14 +122,12 @@ sample_dt <- function(dt, n = 10, group = NULL, color = .sample_dt_color_default
     ng <- length(all_groups)
     n_take_groups <- min(n, ng)
     selected_groups <- all_groups[sample.int(ng, n_take_groups)]
-    ans <- dt[get(group_col) %in% selected_groups]
+    ans <- dt[dt[[group_col]] %in% selected_groups, ]
     data.table::setorderv(ans, group_col)
     if (isTRUE(sort_coverage) && nrow(ans) > 1L) {
         coverage_score <- .coverage_sort_score(ans, exclude_cols = group_col)
-        ans[, `..coverage_score` := coverage_score]
-        ans[, `..sample_order` := seq_len(.N)]
-        data.table::setorderv(ans, c(group_col, "..coverage_score", "..sample_order"), order = c(1L, -1L, 1L))
-        ans[, c("..coverage_score", "..sample_order") := NULL]
+        ord <- order(ans[[group_col]], -coverage_score, seq_len(nrow(ans)))
+        ans <- ans[ord, ]
     }
     setattr(ans, ".group_print_column", group_col)
     setattr(ans, ".group_print_color_values", isTRUE(color))

@@ -147,10 +147,12 @@ enable_dt_print_thousands <- function(
             if (!is.null(grp_col)) {
                 out <- .insert_group_separators(out, x = x, group_col = grp_col)
             }
-            if (isTRUE(color) && isTRUE(group_color_values)) {
-                out <- .colorize_group_headers(out)
+            if (isTRUE(color)) {
                 out <- .colorize_duplicate_headers(out, names(x))
                 out <- .colorize_dt_class_rows(out, class_colors = class_colors)
+            }
+            if (isTRUE(color) && isTRUE(group_color_values)) {
+                out <- .colorize_group_headers(out)
                 out <- .colorize_group_value_rows(out, x = x, group_col = grp_col, similarity_maps = similarity_maps)
             }
             if (isTRUE(show_ncol)) {

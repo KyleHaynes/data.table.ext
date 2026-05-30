@@ -56,15 +56,20 @@
         return(integer(nrow(x)))
     }
 
-    score <- integer(nrow(x))
+    score <- numeric(nrow(x))
     for (col in cols) {
         display_v <- .display_value_strings(x[[col]])
         if (all(is.na(display_v))) {
             next
         }
-        dup <- duplicated(display_v) | duplicated(display_v, fromLast = TRUE)
-        dup[is.na(display_v)] <- FALSE
-        score <- score + as.integer(dup)
+        
+        # Count frequency of each value in this column
+        freq_table <- table(display_v)
+        freq_map <- as.numeric(freq_table[display_v])
+        freq_map[is.na(display_v)] <- 0
+        
+        # Add frequency-weighted score for this column
+        score <- score + freq_map
     }
     score
 }
