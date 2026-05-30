@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420">
+  <rect width="1200" height="420" fill="#f8fafc"/>
+
+  <rect x="60" y="110" width="250" height="180" rx="14" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2"/>
+  <text x="85" y="165" font-size="24" font-family="Segoe UI, Arial, sans-serif" fill="#1e3a8a" font-weight="700">1. Attach Package</text>
+  <text x="85" y="205" font-size="18" font-family="Consolas, monospace" fill="#1e40af">library(data.table.ext)</text>
+
+  <rect x="350" y="110" width="250" height="180" rx="14" fill="#dcfce7" stroke="#15803d" stroke-width="2"/>
+  <text x="375" y="165" font-size="24" font-family="Segoe UI, Arial, sans-serif" fill="#14532d" font-weight="700">2. Enable Defaults</text>
+  <text x="375" y="205" font-size="18" font-family="Consolas, monospace" fill="#166534">turn_everyone_on()</text>
+
+  <rect x="640" y="110" width="250" height="180" rx="14" fill="#fef3c7" stroke="#b45309" stroke-width="2"/>
+  <text x="665" y="165" font-size="24" font-family="Segoe UI, Arial, sans-serif" fill="#7c2d12" font-weight="700">3. Explore Data</text>
+  <text x="665" y="205" font-size="18" font-family="Consolas, monospace" fill="#92400e">sample_dt(...)</text>
+  <text x="665" y="230" font-size="18" font-family="Consolas, monospace" fill="#92400e">str(...), dput(...)</text>
+
+  <rect x="930" y="110" width="210" height="180" rx="14" fill="#ede9fe" stroke="#6d28d9" stroke-width="2"/>
+  <text x="955" y="165" font-size="24" font-family="Segoe UI, Arial, sans-serif" fill="#4c1d95" font-weight="700">4. Outcome</text>
+  <text x="955" y="205" font-size="18" font-family="Segoe UI, Arial, sans-serif" fill="#5b21b6">Faster reading</text>
+  <text x="955" y="230" font-size="18" font-family="Segoe UI, Arial, sans-serif" fill="#5b21b6">Cleaner demos</text>
+
+  <line x1="310" y1="200" x2="350" y2="200" stroke="#334155" stroke-width="3"/>
+  <polygon points="350,200 338,192 338,208" fill="#334155"/>
+
+  <line x1="600" y1="200" x2="640" y2="200" stroke="#334155" stroke-width="3"/>
+  <polygon points="640,200 628,192 628,208" fill="#334155"/>
+
+  <line x1="890" y1="200" x2="930" y2="200" stroke="#334155" stroke-width="3"/>
+  <polygon points="930,200 918,192 918,208" fill="#334155"/>
+</svg>

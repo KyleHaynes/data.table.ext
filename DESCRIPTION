@@ -1,0 +1,17 @@
+Package: data.table.ext
+Type: Package
+Title: Enhanced data.table Display and Sampling Utilities
+Version: 0.1.0
+Authors@R: person(given = "Kyle", family = "H", role = c("aut", "cre"), email = "kyle@example.com")
+Description: Adds opt-in data.table output enhancements for printing, grouped
+    sampling, and data.table-focused str() and dput() behavior. Includes
+    helpers for grouped value highlighting and readability improvements.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Imports:
+    data.table
+Suggests:
+    cli
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
