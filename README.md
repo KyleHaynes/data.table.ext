@@ -245,7 +245,7 @@ cohort <- data.table(
   address = c("789 Pine Ln", "123 Main St", "321 Park Way", "123 Main St", "987 Maple St", "124 Oak Ave", 
               "456 Elm Rd", "654 Birch Dr", "321 Park Way",
               "123 Main St", "124 Oak Ave", "321 Park Way", "456 Elm Rd", "789 Pine Ln"),
-  cohort_id = c(rep("A", 7), rep("B", 7))
+  cohort_id = c(1, 1, 2, 1, 2, 1, 1, 2, 2, 1, 1, 1, 1, 1)
 )
 
 # sort_coverage=FALSE: original order (scattered, less organized)
