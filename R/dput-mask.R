@@ -7,6 +7,7 @@
 #' Non-`data.table` inputs are delegated unchanged.
 #'
 #' @return Invisibly returns `TRUE`.
+#' @export
 enable_dt_dput_mask <- function() {
     original <- get("dput", envir = asNamespace("base"))
     .dt_print_mask_state$original_dput <- original
@@ -37,6 +38,7 @@ enable_dt_dput_mask <- function() {
 #' again.
 #'
 #' @return Invisibly returns `TRUE`.
+#' @export
 disable_dt_dput_mask <- function() {
     if (exists("dput", envir = .GlobalEnv, inherits = FALSE)) {
         rm("dput", envir = .GlobalEnv)

@@ -30,6 +30,7 @@
 #'   during printing.
 #'
 #' @return Invisibly returns `TRUE`.
+#' @export
 enable_dt_print_thousands <- function(
     big.mark = ",",
     color = TRUE,
@@ -175,6 +176,7 @@ enable_dt_print_thousands <- function(
 #' dispatch behavior from attached packages.
 #'
 #' @return Invisibly returns `TRUE`.
+#' @export
 disable_dt_print_thousands <- function() {
     if (exists("print.data.table", envir = .GlobalEnv, inherits = FALSE)) {
         rm("print.data.table", envir = .GlobalEnv)

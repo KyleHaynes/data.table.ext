@@ -90,6 +90,7 @@ DT <- as.data.table(iris)
 sample_dt(DT, n = 2, group = Species)
 str(DT)
 dput(DT[1:2])
+DT[, e(grep("Sepal", names(DT), value = TRUE))]
 ```
 
 ## Iris benefit walkthrough
@@ -342,6 +343,27 @@ enable_dt_print_thousands(
 sample_dt(DT, n = 2, group = team)
 ```
 
+### Example 11: Select columns with regex using e()valuate
+
+```r
+library(data.table)
+library(data.table.ext)
+
+DT <- as.data.table(iris)
+
+# Select columns matching a pattern and return the subset
+DT[, e(grep("Sepal", names(DT), value = TRUE))]
+
+# Select columns that don't match a pattern
+DT[, e(grep("Sepal", names(DT), value = TRUE, invert = TRUE))]
+
+# Select columns by index
+DT[, e(1:2)]
+
+# Select columns by logical index
+DT[, e(c(TRUE, TRUE, FALSE, FALSE, FALSE))]
+```
+
 ## Exported functions
 
 - `enable_dt_print_thousands()`
@@ -350,6 +372,7 @@ sample_dt(DT, n = 2, group = team)
 - `disable_dt_str_mask()`
 - `enable_dt_dput_mask()`
 - `disable_dt_dput_mask()`
+- `e()`
 - `sample_dt()`
 - `set_null()`
 - `switch_col()`

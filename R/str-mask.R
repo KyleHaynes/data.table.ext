@@ -13,6 +13,7 @@
 #'   printed row count in the first line.
 #'
 #' @return Invisibly returns `TRUE`.
+#' @export
 enable_dt_str_mask <- function(big.mark = ",") {
     original <- get("str", envir = asNamespace("utils"))
     .dt_print_mask_state$original_str <- original
@@ -67,6 +68,7 @@ enable_dt_str_mask <- function(big.mark = ",") {
 #' normally again.
 #'
 #' @return Invisibly returns `TRUE`.
+#' @export
 disable_dt_str_mask <- function() {
     if (exists("str", envir = .GlobalEnv, inherits = FALSE)) {
         rm("str", envir = .GlobalEnv)
