@@ -7,8 +7,7 @@ It does this in three big ways:
 1. It upgrades print ergonomics for large tables.
 2. It makes grouped sampling much more presentation-friendly.
 3. It smooths `str()` and `dput()` output for `data.table` objects.
-
-![Package overview](man/figures/overview.svg)
+4. It evaluates function calls in `j = ` using `e()`.
 
 ## Why this package exists
 
@@ -19,7 +18,7 @@ Raw `data.table` output is already very fast and practical, but when you are:
 - debugging mixed-type tables,
 - or copying console output into docs,
 
-small readability improvements can save a lot of time.
+small readability improvements can save time and simplify your workflow.
 
 `data.table.ext` is opinionated about that readability layer.
 
@@ -74,7 +73,7 @@ install.packages(".", repos = NULL, type = "source")
 Or with `devtools`:
 
 ```r
-devtools::install_local(".")
+devtools::install_github("KyleHaynes/data.table.ext")
 ```
 
 ## Quick usage
