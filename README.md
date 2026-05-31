@@ -342,10 +342,6 @@ enable_dt_print_thousands(
 sample_dt(DT, n = 2, group = team)
 ```
 
-## Visual workflow
-
-![Workflow](man/figures/workflow.svg)
-
 ## Exported functions
 
 - `enable_dt_print_thousands()`
