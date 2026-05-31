@@ -179,11 +179,11 @@ library(data.table.ext)
 DT <- as.data.table(iris)[rep(1:.N, 20)]
 
 enable_dt_print_thousands(
-	big.mark = ",",
-	color = TRUE,
-	show_ncol = TRUE,
-	color_group_values = TRUE,
-	group_value_mode = "distinct"
+    big.mark = ",",
+    color = TRUE,
+    show_ncol = TRUE,
+    color_group_values = TRUE,
+    group_value_mode = "distinct"
 )
 
 DT
@@ -193,8 +193,8 @@ DT
 
 ```r
 enable_dt_print_thousands(
-	color = FALSE,
-	show_ncol = TRUE
+    color = FALSE,
+    show_ncol = TRUE
 )
 
 as.data.table(iris)[rep(1:.N, 12)]
@@ -310,11 +310,11 @@ library(data.table)
 library(data.table.ext)
 
 enable_dt_print_thousands(
-	class_colors = c(
-		"<num>" = "col_cyan",
-		"<char>" = "col_yellow",
-		"<fctr>" = "col_magenta"
-	)
+    class_colors = c(
+        "<num>" = "col_cyan",
+        "<char>" = "col_yellow",
+        "<fctr>" = "col_magenta"
+    )
 )
 
 as.data.table(iris)
@@ -327,16 +327,16 @@ library(data.table)
 library(data.table.ext)
 
 DT <- data.table::data.table(
-	id = 1:8,
-	team = c("North", "North", "South", "South", "East", "East", "West", "West"),
-	label = c("alpha", "alpah", "beta", "betta", "gamma", "gama", "delta", "deltta")
+    id = 1:8,
+    team = c("North", "North", "South", "South", "East", "East", "West", "West"),
+    label = c("alpha", "alpah", "beta", "betta", "gamma", "gama", "delta", "deltta")
 )
 
 enable_dt_print_thousands(
-	color_group_values = TRUE,
-	group_value_mode = "similarity",
-	similarity_max_distance = 2,
-	similarity_max_relative = 0.34
+    color_group_values = TRUE,
+    group_value_mode = "similarity",
+    similarity_max_distance = 2,
+    similarity_max_relative = 0.34
 )
 
 sample_dt(DT, n = 2, group = team)
