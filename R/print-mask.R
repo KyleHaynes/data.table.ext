@@ -95,7 +95,9 @@ enable_dt_print_thousands <- function(
         ...) {
         grp_col <- attr(x, ".group_print_column", exact = TRUE)
         group_color_attr <- attr(x, ".group_print_color_values", exact = TRUE)
+        group_disable_color_attr <- attr(x, ".group_print_disable_color", exact = TRUE)
         group_color_values <- isTRUE(group_color_attr)
+        allow_color <- isTRUE(color) && !isTRUE(group_disable_color_attr)
         group_mode_attr <- attr(x, ".group_print_value_mode", exact = TRUE)
         group_mode <- if (is.character(group_mode_attr) && length(group_mode_attr) == 1L &&
             !is.na(group_mode_attr) && group_mode_attr %in% c("similarity", "distinct")) {
@@ -108,13 +110,13 @@ enable_dt_print_thousands <- function(
             nrows <- Inf
         }
 
-        if (isTRUE(color) && isTRUE(force_color)) {
+        if (isTRUE(allow_color) && isTRUE(force_color)) {
             old_opts <- options(cli.num_colors = 256, crayon.enabled = TRUE)
             on.exit(options(old_opts), add = TRUE)
         }
 
         similarity_maps <- list()
-        if (isTRUE(color) && isTRUE(group_color_values)) {
+        if (isTRUE(allow_color) && isTRUE(group_color_values)) {
             similarity_maps <- .build_group_similarity_maps(
                 x = x,
                 group_col = grp_col,
@@ -148,11 +150,11 @@ enable_dt_print_thousands <- function(
             if (!is.null(grp_col)) {
                 out <- .insert_group_separators(out, x = x, group_col = grp_col)
             }
-            if (isTRUE(color)) {
+            if (isTRUE(allow_color)) {
                 out <- .colorize_duplicate_headers(out, names(x))
                 out <- .colorize_dt_class_rows(out, class_colors = class_colors)
             }
-            if (isTRUE(color) && isTRUE(group_color_values)) {
+            if (isTRUE(allow_color) && isTRUE(group_color_values)) {
                 out <- .colorize_group_headers(out)
                 out <- .colorize_group_value_rows(out, x = x, group_col = grp_col, similarity_maps = similarity_maps)
             }

@@ -8,6 +8,7 @@ It does this in three big ways:
 2. It makes grouped sampling much more presentation-friendly.
 3. It smooths `str()` and `dput()` output for `data.table` objects.
 4. It evaluates function calls in `j = ` using `e()`.
+5. It can color full tables with `cdt()`.
 
 ## Why this package exists
 
@@ -87,6 +88,7 @@ turn_everyone_on()
 
 DT <- as.data.table(iris)
 sample_dt(DT, n = 2, group = Species)
+cdt(DT)
 str(DT)
 dput(DT[1:2])
 DT[, e(grep("Sepal", names(DT), value = TRUE))]
@@ -342,7 +344,34 @@ enable_dt_print_thousands(
 sample_dt(DT, n = 2, group = team)
 ```
 
-### Example 11: Select columns with regex using e()valuate
+### Example 11: Color the full table with cdt()
+
+```r
+library(data.table)
+library(data.table.ext)
+
+DT <- as.data.table(iris)
+
+# No group is needed. The whole table is colored as one display unit.
+cdt(DT)
+
+# Large tables stop using color once they cross the threshold.
+cdt(as.data.table(iris)[rep(1:.N, 5)])
+```
+
+### Example 12: Color grouped output with cdt()
+
+```r
+library(data.table)
+library(data.table.ext)
+
+DT <- as.data.table(iris)
+
+# Grouped display keeps the same print treatment as sample_dt(), without sampling.
+cdt(DT, group = Species)
+```
+
+### Example 13: Select columns with regex using e()
 
 ```r
 library(data.table)
@@ -372,6 +401,7 @@ DT[, e(c(TRUE, TRUE, FALSE, FALSE, FALSE))]
 - `enable_dt_dput_mask()`
 - `disable_dt_dput_mask()`
 - `e()`
+- `cdt()`
 - `sample_dt()`
 - `set_null()`
 - `switch_col()`
