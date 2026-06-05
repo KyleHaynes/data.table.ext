@@ -13,7 +13,8 @@ enable_dt_print_thousands(
   similarity_max_distance = 2L,
   similarity_max_relative = 0.3,
   group_value_mode = c("distinct", "similarity"),
-  force_color = TRUE
+  force_color = TRUE,
+  group_sep_fmt = "--------- Group: \%s"
 )
 }
 \arguments{
@@ -45,8 +46,11 @@ threshold used alongside \code{similarity_max_distance}.}
 group/column gets its own color.}
 
 \item{force_color}{Logical scalar. If \code{TRUE}, force ANSI color output by
-temporarily setting \code{options(cli.num_colors = 256, crayon.enabled = TRUE)}
-during printing.}
+temporarily setting \code{options(cli.num_colors = 256)} during printing.}
+
+\item{group_sep_fmt}{A \code{sprintf}-style format string with one \verb{\\\%s}
+placeholder used to format group separator lines. Default:
+\code{"--------- Group: \\\%s"}.}
 }
 \value{
 Invisibly returns \code{TRUE}.

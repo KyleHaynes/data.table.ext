@@ -1,6 +1,5 @@
 .onAttach <- function(libname, pkgname) {
     turn_everyone_on()
-    assign("e", e, envir = .GlobalEnv)
 
     if (requireNamespace("cli", quietly = TRUE)) {
         example_code <- c(

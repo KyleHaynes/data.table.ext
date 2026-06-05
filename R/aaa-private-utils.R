@@ -8,6 +8,7 @@
         "<char>" = "col_green",
         "<fctr>" = "col_magenta",
         "<Date>" = "col_yellow",
+        "<POSct>" = "col_yellow",
         "<POSc>" = "col_yellow",
         "<IDat>" = "col_br_yellow",
         "<lgcl>" = "col_cyan",
@@ -272,6 +273,7 @@
     out <- lines
     group_vals <- if (isTRUE(has_group_col)) as.character(x[[group_col]]) else rep("__all__", nrow(x))
     group_vals[is.na(group_vals)] <- "<NA>"
+    seen_rows <- integer(0L)
 
     for (i in seq_along(out)) {
         p <- .format_dt_row_index(out[[i]])
@@ -283,16 +285,21 @@
         if (is.na(rn) || rn < 1L || rn > nrow(x)) {
             next
         }
+        if (rn %in% seen_rows) {
+            next
+        }
 
         g <- group_vals[[rn]]
         g_map <- similarity_maps[[g]]
         if (is.null(g_map) || !length(g_map)) {
+            seen_rows <- c(seen_rows, rn)
             next
         }
 
         line <- out[[i]]
         row_sep <- regexpr(":", line, fixed = TRUE)[1L]
         if (row_sep < 1L) {
+            seen_rows <- c(seen_rows, rn)
             next
         }
         cursor <- row_sep + 1L
@@ -321,6 +328,7 @@
             cursor <- start + nchar(colored, type = "chars")
         }
         out[[i]] <- line
+        seen_rows <- c(seen_rows, rn)
     }
 
     out
@@ -345,7 +353,7 @@
             next
         }
         for (tok in unique(toks)) {
-            spec <- class_colors[[tok]]
+            spec <- unname(class_colors[names(class_colors) %in% tok][1L])
             if (is.null(spec)) {
                 next
             }
@@ -365,6 +373,7 @@
         return(lines)
     }
     out <- lines
+    # Matches the default sep_fmt pattern; custom formats that omit "Group:" won't be colored.
     idx <- which(grepl("^\\s*-{3,}\\s*Group:\\s", out, perl = TRUE))
     if (!length(idx)) {
         return(out)
@@ -373,10 +382,6 @@
     col_fun <- get("col_br_cyan", envir = asNamespace("cli"), inherits = FALSE)
     out[idx] <- vapply(out[idx], col_fun, character(1L))
     out
-}
-
-.regex_escape <- function(x) {
-    gsub("([][{}()+*^$|\\\\.?])", "\\\\\\\\\\1", x)
 }
 
 .colorize_duplicate_headers <- function(lines, col_names) {
@@ -491,7 +496,7 @@
     out
 }
 
-.insert_group_separators <- function(lines, x, group_col) {
+.insert_group_separators <- function(lines, x, group_col, sep_fmt = "--------- Group: %s") {
     if (!length(lines) || !is.character(group_col) || length(group_col) != 1L) {
         return(lines)
     }
@@ -502,11 +507,11 @@
     vals <- x[[group_col]]
     out <- character(0L)
     prev_group <- NULL
+    seen_rows <- integer(0L)
 
     for (line in lines) {
         p <- .format_dt_row_index(line)
         if (!isTRUE(p$is_row)) {
-            prev_group <- NULL
             out <- c(out, line)
             next
         }
@@ -518,11 +523,14 @@
         }
 
         this_group <- .as_group_label(vals[[rn]])
-        if (is.null(prev_group) || !identical(this_group, prev_group)) {
-            out <- c(out, sprintf("--------- Group: %s", this_group))
+        if (!(rn %in% seen_rows) && (is.null(prev_group) || !identical(this_group, prev_group))) {
+            out <- c(out, sprintf(sep_fmt, this_group))
         }
         out <- c(out, line)
         prev_group <- this_group
+        if (!(rn %in% seen_rows)) {
+            seen_rows <- c(seen_rows, rn)
+        }
     }
 
     out

@@ -18,3 +18,10 @@ Convenience wrapper for evaluating an expression in the calling
 \code{data.table} j environment. If the result looks like a column selector, it
 returns the matching column subset from the current \code{.SD} table.
 }
+\details{
+Note: frame-walking to locate the parent data.table is best-effort. It
+searches up to 10 frames for variables named \code{DT}, \code{dt}, \code{data}, \code{x},
+\code{.BY}, or \code{.SD}, then falls back to symbol and exhaustive search. This
+works reliably at the top level and in simple \code{[} calls but may not resolve
+correctly inside deeply nested or non-standard evaluation contexts.
+}

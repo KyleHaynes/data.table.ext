@@ -20,12 +20,31 @@ enable_dt_dput_mask <- function() {
             return(.dt_print_mask_state$original_dput(x, file = file, control = control))
         }
 
-        x_out <- if (requireNamespace("data.table", quietly = TRUE)) data.table::copy(x) else x
-        attr(x_out, ".internal.selfref") <- NULL
+        # .internal.selfref is a C-level external pointer that can't be removed
+        # via attr<- or setattr. Capture the raw dput text and strip it with regex.
+        tmp <- textConnection("dput_lines", open = "w", local = TRUE)
+        on.exit(try(close(tmp), silent = TRUE), add = TRUE)
         if (missing(control)) {
-            return(.dt_print_mask_state$original_dput(x_out, file = file))
+            .dt_print_mask_state$original_dput(x, file = tmp)
+        } else {
+            .dt_print_mask_state$original_dput(x, file = tmp, control = control)
         }
-        .dt_print_mask_state$original_dput(x_out, file = file, control = control)
+        close(tmp)
+        on.exit(NULL)
+
+        text <- paste(dput_lines, collapse = "\n")
+        # Remove ", .internal.selfref = <pointer: ...>)" at the end of structure()
+        text <- gsub(
+            ",\\s*\\.internal\\.selfref\\s*=\\s*<pointer:[^>]*>\\s*\\)",
+            ")",
+            text
+        )
+        if (identical(file, "")) {
+            cat(text, "\n", sep = "")
+        } else {
+            writeLines(text, con = file)
+        }
+        invisible(x)
     }
 
     assign("dput", dput, envir = .GlobalEnv)

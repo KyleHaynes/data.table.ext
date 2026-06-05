@@ -9,7 +9,8 @@ sample_dt(
   n = 10,
   group = NULL,
   color = .sample_dt_color_default(),
-  sort_coverage = TRUE
+  sort_coverage = TRUE,
+  color_threshold = 500L
 )
 }
 \arguments{
@@ -29,6 +30,10 @@ mode). If needed, this will also auto-enable
 \item{sort_coverage}{Logical scalar. If \code{TRUE} (default), sort rows by
 commonality within each selected group: rows with more frequent values
 appear first. Only applies when \code{group} is supplied.}
+
+\item{color_threshold}{Integer scalar. If any group has more rows than this,
+color output is disabled for the returned table. Matches the same parameter
+on \code{cdt()}.}
 }
 \value{
 A data.table. If \code{group} is supplied, returned rows include all

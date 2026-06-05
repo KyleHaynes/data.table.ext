@@ -26,8 +26,10 @@
 #'   `"similarity"`. In `"distinct"` mode, every distinct string within each
 #'   group/column gets its own color.
 #' @param force_color Logical scalar. If `TRUE`, force ANSI color output by
-#'   temporarily setting `options(cli.num_colors = 256, crayon.enabled = TRUE)`
-#'   during printing.
+#'   temporarily setting `options(cli.num_colors = 256)` during printing.
+#' @param group_sep_fmt A `sprintf`-style format string with one `\%s`
+#'   placeholder used to format group separator lines. Default:
+#'   `"--------- Group: \%s"`.
 #'
 #' @return Invisibly returns `TRUE`.
 #' @export
@@ -40,12 +42,10 @@ enable_dt_print_thousands <- function(
     similarity_max_distance = 2L,
     similarity_max_relative = 0.30,
     group_value_mode = c("distinct", "similarity"),
-    force_color = TRUE
+    force_color = TRUE,
+    group_sep_fmt = "--------- Group: %s"
 ) {
     group_value_mode <- match.arg(group_value_mode)
-    if (!requireNamespace("data.table", quietly = TRUE)) {
-        stop("Package 'data.table' is required.", call. = FALSE)
-    }
     if (!isTRUE(color) && !identical(color, FALSE)) {
         stop("'color' must be TRUE or FALSE.", call. = FALSE)
     }
@@ -57,6 +57,9 @@ enable_dt_print_thousands <- function(
     }
     if (!isTRUE(force_color) && !identical(force_color, FALSE)) {
         stop("'force_color' must be TRUE or FALSE.", call. = FALSE)
+    }
+    if (!is.character(group_sep_fmt) || length(group_sep_fmt) != 1L || is.na(group_sep_fmt)) {
+        stop("'group_sep_fmt' must be a character scalar.", call. = FALSE)
     }
 
     similarity_max_distance <- suppressWarnings(as.integer(similarity_max_distance[1L]))
@@ -111,7 +114,7 @@ enable_dt_print_thousands <- function(
         }
 
         if (isTRUE(allow_color) && isTRUE(force_color)) {
-            old_opts <- options(cli.num_colors = 256, crayon.enabled = TRUE)
+            old_opts <- options(cli.num_colors = 256)
             on.exit(options(old_opts), add = TRUE)
         }
 
@@ -148,7 +151,7 @@ enable_dt_print_thousands <- function(
         if (length(out)) {
             out <- .align_dt_row_indices(out, big.mark = big.mark)
             if (!is.null(grp_col)) {
-                out <- .insert_group_separators(out, x = x, group_col = grp_col)
+                out <- .insert_group_separators(out, x = x, group_col = grp_col, sep_fmt = group_sep_fmt)
             }
             if (isTRUE(allow_color)) {
                 out <- .colorize_duplicate_headers(out, names(x))
