@@ -153,14 +153,16 @@ enable_dt_print_thousands <- function(
             if (!is.null(grp_col)) {
                 out <- .insert_group_separators(out, x = x, group_col = grp_col, sep_fmt = group_sep_fmt)
             }
+            line_columns <- .dt_print_line_columns(out)
             if (isTRUE(allow_color)) {
                 out <- .colorize_duplicate_headers(out, names(x))
                 out <- .colorize_dt_class_rows(out, class_colors = class_colors)
             }
             if (isTRUE(allow_color) && isTRUE(group_color_values)) {
                 out <- .colorize_group_headers(out)
-                out <- .colorize_group_value_rows(out, x = x, group_col = grp_col, similarity_maps = similarity_maps)
+                out <- .colorize_group_value_rows(out, x = x, group_col = grp_col, similarity_maps = similarity_maps, line_columns = line_columns)
             }
+            out <- .strip_repeated_class_rows(out)
             if (isTRUE(show_ncol)) {
                 out <- c(sprintf("ncol: %d", ncol(x)), out)
             }

@@ -80,6 +80,41 @@
     if (length(m) == 1L && m[1L] == -1L) 0L else length(m)
 }
 
+.strip_ansi_codes <- function(x) {
+    gsub("\033\\[[0-9;]*m", "", x, perl = TRUE)
+}
+
+#' Identify a data.table class/type row (for example `<num>  <fctr>`).
+#' Unlike a plain token count, this also matches a trailing column block
+#' that has only a single column (and so only one `<...>` token), by
+#' requiring that nothing besides whitespace remains once tokens (and any
+#' ANSI color codes already applied around them) are removed.
+.is_class_line <- function(line) {
+    if (!is.character(line) || length(line) != 1L || is.na(line)) {
+        return(FALSE)
+    }
+    plain <- .strip_ansi_codes(line)
+    if (.count_class_tokens(plain) < 1L) {
+        return(FALSE)
+    }
+    !nzchar(trimws(gsub("<[^>]+>", "", plain, perl = TRUE)))
+}
+
+#' Drop the repeated class/type row (for example `<num>`) that data.table
+#' prints under the column-name row of every wrapped column block, keeping
+#' only the one under the first block's header.
+.strip_repeated_class_rows <- function(lines) {
+    if (!length(lines)) {
+        return(lines)
+    }
+    is_class <- vapply(lines, .is_class_line, logical(1L))
+    if (sum(is_class) <= 1L) {
+        return(lines)
+    }
+    drop_idx <- which(is_class)[-1L]
+    lines[-drop_idx]
+}
+
 .as_group_label <- function(x) {
     if (length(x) == 0L || is.null(x) || is.na(x)) {
         return("<NA>")
@@ -264,7 +299,40 @@
     out
 }
 
-.colorize_group_value_rows <- function(lines, x, group_col, similarity_maps) {
+.split_print_header_tokens <- function(line) {
+    if (!is.character(line) || length(line) != 1L || is.na(line)) {
+        return(character(0L))
+    }
+    toks <- regmatches(line, gregexpr("\\S+", line, perl = TRUE))[[1L]]
+    if (length(toks) == 1L && toks[1L] == -1L) {
+        return(character(0L))
+    }
+    gsub('^"|"$', "", toks)
+}
+
+#' For each printed row line, determine which columns (in left-to-right
+#' order) appear on that physical line. data.table wraps wide tables into
+#' multiple side-by-side column blocks, each repeating its own header/class
+#' line and the full set of rows, so a single global column order cannot be
+#' assumed when coloring values per line.
+.dt_print_line_columns <- function(lines) {
+    n <- length(lines)
+    out <- vector("list", n)
+    current_cols <- NULL
+    for (i in seq_len(n)) {
+        line <- lines[[i]]
+        if (.is_class_line(line) && i > 1L) {
+            current_cols <- .split_print_header_tokens(lines[[i - 1L]])
+            next
+        }
+        if (isTRUE(.format_dt_row_index(line)$is_row)) {
+            out[[i]] <- current_cols
+        }
+    }
+    out
+}
+
+.colorize_group_value_rows <- function(lines, x, group_col, similarity_maps, line_columns = NULL) {
     if (!length(lines) || !nrow(x) || !length(similarity_maps)) {
         return(lines)
     }
@@ -273,7 +341,7 @@
     out <- lines
     group_vals <- if (isTRUE(has_group_col)) as.character(x[[group_col]]) else rep("__all__", nrow(x))
     group_vals[is.na(group_vals)] <- "<NA>"
-    seen_rows <- integer(0L)
+    all_cols <- names(x)
 
     for (i in seq_along(out)) {
         p <- .format_dt_row_index(out[[i]])
@@ -285,25 +353,25 @@
         if (is.na(rn) || rn < 1L || rn > nrow(x)) {
             next
         }
-        if (rn %in% seen_rows) {
-            next
-        }
 
         g <- group_vals[[rn]]
         g_map <- similarity_maps[[g]]
         if (is.null(g_map) || !length(g_map)) {
-            seen_rows <- c(seen_rows, rn)
             next
         }
 
         line <- out[[i]]
         row_sep <- regexpr(":", line, fixed = TRUE)[1L]
         if (row_sep < 1L) {
-            seen_rows <- c(seen_rows, rn)
             next
         }
         cursor <- row_sep + 1L
-        for (col in names(g_map)) {
+        line_cols <- if (!is.null(line_columns) && i <= length(line_columns)) line_columns[[i]] else NULL
+        block_cols <- if (length(line_cols)) line_cols else all_cols
+        for (col in block_cols) {
+            if (!(col %in% names(g_map))) {
+                next
+            }
             raw_val <- .display_value_strings(x[[col]])[[rn]]
             if (is.null(raw_val) || is.na(raw_val) || !nzchar(raw_val)) {
                 next
@@ -328,7 +396,6 @@
             cursor <- start + nchar(colored, type = "chars")
         }
         out[[i]] <- line
-        seen_rows <- c(seen_rows, rn)
     }
 
     out
@@ -339,7 +406,7 @@
         return(lines)
     }
 
-    is_class_line <- vapply(lines, .count_class_tokens, integer(1L)) >= 2L
+    is_class_line <- vapply(lines, .is_class_line, logical(1L))
     if (!any(is_class_line)) {
         return(lines)
     }
