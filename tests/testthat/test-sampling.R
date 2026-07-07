@@ -90,3 +90,69 @@ test_that("switch_col sets and retrieves option", {
 test_that("switch_col errors on non-logical", {
     expect_error(switch_col("yes"), "'on' must be TRUE or FALSE")
 })
+
+# ── highlight_dt ───────────────────────────────────────────────────────────────
+
+test_that("highlight_dt tags matching rows", {
+    out <- highlight_dt(dt, val > 10)
+    expect_equal(attr(out, ".highlight_print_rows"), which(dt$val > 10))
+    expect_equal(attr(out, ".highlight_print_color"), "col_red")
+})
+
+test_that("highlight_dt accepts a pre-computed logical vector", {
+    cond <- dt$val > 10
+    out <- highlight_dt(dt, cond)
+    expect_equal(attr(out, ".highlight_print_rows"), which(cond))
+})
+
+test_that("highlight_dt respects custom color", {
+    out <- highlight_dt(dt, val > 10, color = "col_yellow")
+    expect_equal(attr(out, ".highlight_print_color"), "col_yellow")
+})
+
+test_that("highlight_dt errors on non-data.table", {
+    expect_error(highlight_dt(data.frame(x = 1), x > 0), "'dt' must be a data.table")
+})
+
+test_that("highlight_dt errors on wrong-length condition", {
+    expect_error(highlight_dt(dt, c(TRUE, FALSE)), "same length")
+})
+
+test_that("highlight_dt colors matching rows when printed", {
+    skip_if_not_installed("cli")
+    d <- data.table(x = 1:3)
+    out <- highlight_dt(d, x == 2)
+    printed <- capture.output(print(out))
+    expect_true(any(grepl("\033\\[3[0-9]m", printed)))
+})
+
+# ── dupe_dt ────────────────────────────────────────────────────────────────────
+
+test_that("dupe_dt returns only rows that participate in a duplicate", {
+    d <- data.table(a = c(1, 1, 2, 3, 3, 3), b = c("x", "x", "y", "z", "z", "z"))
+    out <- dupe_dt(d, color = FALSE)
+    expect_equal(nrow(out), 5L)
+    expect_true(all(c(".dupe_group") %in% names(out)))
+    expect_equal(data.table::uniqueN(out$.dupe_group), 2L)
+})
+
+test_that("dupe_dt returns zero rows when there are no duplicates", {
+    d <- data.table(a = 1:3, b = c("x", "y", "z"))
+    out <- dupe_dt(d, color = FALSE)
+    expect_equal(nrow(out), 0L)
+})
+
+test_that("dupe_dt respects a 'by' subset of columns", {
+    d <- data.table(a = c(1, 1, 2), b = c("x", "y", "z"))
+    out <- dupe_dt(d, by = "a", color = FALSE)
+    expect_equal(nrow(out), 2L)
+})
+
+test_that("dupe_dt errors on non-data.table", {
+    expect_error(dupe_dt(data.frame(x = 1)), "'dt' must be a data.table")
+})
+
+test_that("dupe_dt errors on missing by column", {
+    d <- data.table(a = 1)
+    expect_error(dupe_dt(d, by = "zzz"), "not found")
+})

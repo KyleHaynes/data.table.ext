@@ -10,7 +10,9 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 Imports:
-    data.table
+    data.table,
+    stats,
+    utils
 Suggests:
     cli,
     testthat (>= 3.0.0)

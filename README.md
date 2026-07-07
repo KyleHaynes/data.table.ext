@@ -9,6 +9,10 @@ It does this in three big ways:
 3. It smooths `str()` and `dput()` output for `data.table` objects.
 4. It evaluates function calls in `j = ` using `e()`.
 5. It can color full tables with `cdt()`.
+6. It highlights rows of interest with `highlight_dt()`.
+7. It surfaces duplicate rows with `dupe_dt()` and outliers with `outlier_dt()`.
+8. It finds candidate keys with `key_dt()` and shows column distributions with `spark_dt()`.
+9. It exports tables as markdown with `md_dt()`, and to the clipboard with `copy_dt()`.
 
 ## Why this package exists
 
@@ -392,6 +396,93 @@ DT[, e(1:2)]
 DT[, e(c(TRUE, TRUE, FALSE, FALSE, FALSE))]
 ```
 
+### Example 14: Highlight rows matching a condition
+
+```r
+library(data.table)
+library(data.table.ext)
+
+DT <- as.data.table(iris)
+
+# Highlight rows matching a condition in red (default)
+highlight_dt(DT, Sepal.Length > 7)
+
+# Use a custom cli color
+highlight_dt(DT, Species == "setosa", color = "col_cyan")
+```
+
+### Example 15: Surface duplicate rows with dupe_dt()
+
+```r
+library(data.table)
+library(data.table.ext)
+
+DT <- data.table(
+    id = c(1, 1, 2, 3, 3, 3),
+    name = c("a", "a", "b", "c", "c", "c")
+)
+
+# Rows that participate in a duplicate cluster, grouped for print
+dupe_dt(DT)
+
+# Duplicates based on a subset of columns
+dupe_dt(DT, by = "id")
+```
+
+### Example 16: Flag outlier rows with outlier_dt()
+
+```r
+library(data.table)
+library(data.table.ext)
+
+DT <- as.data.table(iris)
+
+# IQR-based flagging across all numeric columns (default)
+outlier_dt(DT)
+
+# Z-score based flagging on a specific column
+outlier_dt(DT, cols = "Sepal.Width", method = "zscore", threshold = 2.5)
+```
+
+### Example 17: Find candidate keys with key_dt()
+
+```r
+library(data.table)
+library(data.table.ext)
+
+DT <- as.data.table(iris)
+DT[, id := .I]
+
+# Reports minimal column combinations that uniquely identify every row
+key_dt(DT)
+```
+
+### Example 18: Scan a column's distribution with spark_dt()
+
+```r
+library(data.table)
+library(data.table.ext)
+
+DT <- as.data.table(iris)
+
+spark_dt(DT, Sepal.Length)
+```
+
+### Example 19: Export a table as markdown or to the clipboard
+
+```r
+library(data.table)
+library(data.table.ext)
+
+DT <- as.data.table(iris)[1:5]
+
+# Print a markdown pipe table (handy for docs, PRs, issues)
+md_dt(DT)
+
+# Copy the same markdown table to the system clipboard
+copy_dt(DT)
+```
+
 ## Exported functions
 
 - `enable_dt_print_thousands()`
@@ -406,3 +497,14 @@ DT[, e(c(TRUE, TRUE, FALSE, FALSE, FALSE))]
 - `set_null()`
 - `switch_col()`
 - `turn_everyone_on()`
+- `na_dt()`
+- `freq_dt()`
+- `schema_dt()`
+- `rename_dt()`
+- `highlight_dt()`
+- `dupe_dt()`
+- `outlier_dt()`
+- `key_dt()`
+- `spark_dt()`
+- `md_dt()`
+- `copy_dt()`

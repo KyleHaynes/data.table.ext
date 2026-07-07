@@ -44,7 +44,7 @@ enable_dt_str_mask <- function(big.mark = ",") {
             return(do.call(.dt_print_mask_state$original_str, args))
         }
 
-        out <- capture.output(do.call(.dt_print_mask_state$original_str, args))
+        out <- utils::capture.output(do.call(.dt_print_mask_state$original_str, args))
         if (length(out)) {
             out[1L] <- sprintf(
                 "# A 'data.table': %s rows, %d variables.",

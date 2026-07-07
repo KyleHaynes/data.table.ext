@@ -84,11 +84,11 @@
     gsub("\033\\[[0-9;]*m", "", x, perl = TRUE)
 }
 
-#' Identify a data.table class/type row (for example `<num>  <fctr>`).
-#' Unlike a plain token count, this also matches a trailing column block
-#' that has only a single column (and so only one `<...>` token), by
-#' requiring that nothing besides whitespace remains once tokens (and any
-#' ANSI color codes already applied around them) are removed.
+# Identify a data.table class/type row (for example `<num>  <fctr>`).
+# Unlike a plain token count, this also matches a trailing column block
+# that has only a single column (and so only one `<...>` token), by
+# requiring that nothing besides whitespace remains once tokens (and any
+# ANSI color codes already applied around them) are removed.
 .is_class_line <- function(line) {
     if (!is.character(line) || length(line) != 1L || is.na(line)) {
         return(FALSE)
@@ -100,9 +100,9 @@
     !nzchar(trimws(gsub("<[^>]+>", "", plain, perl = TRUE)))
 }
 
-#' Drop the repeated class/type row (for example `<num>`) that data.table
-#' prints under the column-name row of every wrapped column block, keeping
-#' only the one under the first block's header.
+# Drop the repeated class/type row (for example `<num>`) that data.table
+# prints under the column-name row of every wrapped column block, keeping
+# only the one under the first block's header.
 .strip_repeated_class_rows <- function(lines) {
     if (!length(lines)) {
         return(lines)
@@ -220,7 +220,7 @@
 
     for (i in seq_len(n - 1L)) {
         for (j in (i + 1L):n) {
-            d <- adist(values[[i]], values[[j]], partial = FALSE, ignore.case = TRUE)[1L]
+            d <- utils::adist(values[[i]], values[[j]], partial = FALSE, ignore.case = TRUE)[1L]
             denom <- max(nchar(values[[i]], type = "chars"), nchar(values[[j]], type = "chars"), 1L)
             rel <- d / denom
             if (d <= max_distance || rel <= max_relative) {
@@ -310,11 +310,11 @@
     gsub('^"|"$', "", toks)
 }
 
-#' For each printed row line, determine which columns (in left-to-right
-#' order) appear on that physical line. data.table wraps wide tables into
-#' multiple side-by-side column blocks, each repeating its own header/class
-#' line and the full set of rows, so a single global column order cannot be
-#' assumed when coloring values per line.
+# For each printed row line, determine which columns (in left-to-right
+# order) appear on that physical line. data.table wraps wide tables into
+# multiple side-by-side column blocks, each repeating its own header/class
+# line and the full set of rows, so a single global column order cannot be
+# assumed when coloring values per line.
 .dt_print_line_columns <- function(lines) {
     n <- length(lines)
     out <- vector("list", n)
@@ -561,6 +561,95 @@
     }
 
     out
+}
+
+.colorize_highlight_rows <- function(lines, highlight_rows, color = "col_red") {
+    if (!length(lines) || !length(highlight_rows)) {
+        return(lines)
+    }
+    color_fun <- .resolve_cli_color_fun(color)
+    if (is.null(color_fun)) {
+        return(lines)
+    }
+
+    out <- lines
+    for (i in seq_along(out)) {
+        p <- .format_dt_row_index(out[[i]])
+        if (!isTRUE(p$is_row)) {
+            next
+        }
+        rn <- suppressWarnings(as.integer(gsub(",", "", p$raw_label, fixed = TRUE)))
+        if (is.na(rn) || !(rn %in% highlight_rows)) {
+            next
+        }
+        out[[i]] <- color_fun(out[[i]])
+    }
+    out
+}
+
+.md_table_cell_strings <- function(x) {
+    s <- .display_value_strings(x)
+    if (all(is.na(s)) && !all(is.na(x))) {
+        s <- vapply(x, function(v) paste(format(v), collapse = ", "), character(1L))
+    }
+    s[is.na(s)] <- ""
+    gsub("|", "\\|", s, fixed = TRUE)
+}
+
+.render_md_table <- function(dt, n = Inf) {
+    n <- suppressWarnings(as.numeric(n[1L]))
+    if (is.na(n) || n <= 0) {
+        stop("'n' must be a positive number.", call. = FALSE)
+    }
+    n_take <- min(nrow(dt), if (is.infinite(n)) nrow(dt) else as.integer(n))
+    view <- dt[seq_len(n_take)]
+    cols <- names(view)
+
+    header <- paste0("| ", paste(cols, collapse = " | "), " |")
+    sep <- paste0("| ", paste(rep("---", length(cols)), collapse = " | "), " |")
+
+    if (!n_take) {
+        return(paste(c(header, sep), collapse = "\n"))
+    }
+
+    body_cells <- lapply(cols, function(col) .md_table_cell_strings(view[[col]]))
+    rows <- vapply(
+        seq_len(n_take),
+        function(i) paste0("| ", paste(vapply(body_cells, `[[`, character(1L), i), collapse = " | "), " |"),
+        character(1L)
+    )
+    paste(c(header, sep, rows), collapse = "\n")
+}
+
+.write_clipboard <- function(text) {
+    sysname <- Sys.info()[["sysname"]]
+    lines <- strsplit(text, "\n", fixed = TRUE)[[1L]]
+
+    if (identical(sysname, "Windows")) {
+        utils::writeClipboard(lines)
+        return(invisible(TRUE))
+    }
+    if (identical(sysname, "Darwin") && nzchar(Sys.which("pbcopy"))) {
+        con <- pipe("pbcopy", open = "w")
+        on.exit(close(con))
+        writeLines(lines, con)
+        return(invisible(TRUE))
+    }
+    if (nzchar(Sys.which("xclip"))) {
+        con <- pipe("xclip -selection clipboard", open = "w")
+        on.exit(close(con))
+        writeLines(lines, con)
+        return(invisible(TRUE))
+    }
+    if (nzchar(Sys.which("xsel"))) {
+        con <- pipe("xsel --clipboard --input", open = "w")
+        on.exit(close(con))
+        writeLines(lines, con)
+        return(invisible(TRUE))
+    }
+
+    warning("No clipboard utility found; copy the returned text manually.", call. = FALSE)
+    invisible(FALSE)
 }
 
 .insert_group_separators <- function(lines, x, group_col, sep_fmt = "--------- Group: %s") {

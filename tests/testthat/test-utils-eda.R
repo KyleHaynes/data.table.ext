@@ -91,3 +91,103 @@ test_that("rename_dt errors on unnamed renames vector", {
 test_that("rename_dt errors on non-data.table", {
     expect_error(rename_dt(data.frame(x = 1), c(y = "x")), "'dt' must be a data.table")
 })
+
+# ── spark_dt ───────────────────────────────────────────────────────────────────
+
+test_that("spark_dt returns a sparkline with min/median/max", {
+    d <- data.table(v = 1:100)
+    out <- capture.output(txt <- spark_dt(d, v))
+    expect_match(out, "min 1")
+    expect_match(out, "max 100")
+    expect_true(nzchar(txt))
+})
+
+test_that("spark_dt accepts a character column name", {
+    d <- data.table(v = c(1, 2, 3))
+    expect_no_error(capture.output(spark_dt(d, "v")))
+})
+
+test_that("spark_dt handles all-NA columns", {
+    d <- data.table(v = c(NA_real_, NA_real_))
+    out <- capture.output(txt <- spark_dt(d, v))
+    expect_match(out, "no non-NA values")
+})
+
+test_that("spark_dt errors on non-numeric column", {
+    d <- data.table(v = c("a", "b"))
+    expect_error(spark_dt(d, v), "must be numeric")
+})
+
+test_that("spark_dt errors on missing column", {
+    d <- data.table(v = 1)
+    expect_error(spark_dt(d, "zzz"), "not found")
+})
+
+test_that("spark_dt errors on non-data.table", {
+    expect_error(spark_dt(data.frame(x = 1), x), "'dt' must be a data.table")
+})
+
+# ── outlier_dt ─────────────────────────────────────────────────────────────────
+
+test_that("outlier_dt flags iqr outliers", {
+    d <- data.table(v = c(rep(10, 20), 1000))
+    out <- outlier_dt(d)
+    expect_equal(nrow(out), 1L)
+    expect_equal(out$v, 1000)
+    expect_equal(out$outlier_cols, "v")
+})
+
+test_that("outlier_dt flags zscore outliers", {
+    set.seed(1)
+    d <- data.table(v = c(rnorm(100), 100))
+    out <- outlier_dt(d, method = "zscore")
+    expect_true(100 %in% out$v)
+})
+
+test_that("outlier_dt returns zero rows when nothing is flagged", {
+    d <- data.table(v = rep(10, 10))
+    out <- outlier_dt(d)
+    expect_equal(nrow(out), 0L)
+    expect_true("outlier_cols" %in% names(out))
+})
+
+test_that("outlier_dt restricts to requested numeric cols", {
+    d <- data.table(v = c(rep(10, 20), 1000), label = "x")
+    expect_error(outlier_dt(d, cols = "label"), "not numeric")
+    expect_error(outlier_dt(d, cols = "zzz"), "not found")
+})
+
+test_that("outlier_dt errors on non-data.table", {
+    expect_error(outlier_dt(data.frame(x = 1)), "'dt' must be a data.table")
+})
+
+# ── key_dt ─────────────────────────────────────────────────────────────────────
+
+test_that("key_dt finds a single-column key", {
+    d <- data.table(id = 1:5, grp = c("a", "a", "b", "b", "c"))
+    out <- key_dt(d)
+    expect_true("id" %in% out$cols)
+    expect_equal(out$n_cols[out$cols == "id"], 1L)
+})
+
+test_that("key_dt finds a minimal multi-column key and skips supersets", {
+    d <- data.table(a = c(1, 1, 2, 2), b = c(1, 2, 1, 2))
+    out <- key_dt(d)
+    expect_true("a, b" %in% out$cols)
+    expect_false(any(out$cols == "a, b" & out$n_cols != 2L))
+})
+
+test_that("key_dt returns zero rows when nothing under max_size uniquely identifies rows", {
+    d <- data.table(a = c(1, 1), b = c(1, 1))
+    out <- key_dt(d, max_size = 1L)
+    expect_equal(nrow(out), 0L)
+})
+
+test_that("key_dt errors on non-data.table", {
+    expect_error(key_dt(data.frame(x = 1)), "'dt' must be a data.table")
+})
+
+test_that("key_dt errors on missing columns", {
+    d <- data.table(x = 1)
+    expect_error(key_dt(d, cols = "zzz"), "not found")
+})

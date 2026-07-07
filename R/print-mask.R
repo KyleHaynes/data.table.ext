@@ -101,6 +101,8 @@ enable_dt_print_thousands <- function(
         group_disable_color_attr <- attr(x, ".group_print_disable_color", exact = TRUE)
         group_color_values <- isTRUE(group_color_attr)
         allow_color <- isTRUE(color) && !isTRUE(group_disable_color_attr)
+        highlight_rows_attr <- attr(x, ".highlight_print_rows", exact = TRUE)
+        highlight_color_attr <- attr(x, ".highlight_print_color", exact = TRUE)
         group_mode_attr <- attr(x, ".group_print_value_mode", exact = TRUE)
         group_mode <- if (is.character(group_mode_attr) && length(group_mode_attr) == 1L &&
             !is.na(group_mode_attr) && group_mode_attr %in% c("similarity", "distinct")) {
@@ -130,7 +132,7 @@ enable_dt_print_thousands <- function(
             )
         }
 
-        out <- capture.output(
+        out <- utils::capture.output(
             .dt_print_mask_state$original(
                 x,
                 topn = topn,
@@ -161,6 +163,13 @@ enable_dt_print_thousands <- function(
             if (isTRUE(allow_color) && isTRUE(group_color_values)) {
                 out <- .colorize_group_headers(out)
                 out <- .colorize_group_value_rows(out, x = x, group_col = grp_col, similarity_maps = similarity_maps, line_columns = line_columns)
+            }
+            if (isTRUE(allow_color) && length(highlight_rows_attr)) {
+                out <- .colorize_highlight_rows(
+                    out,
+                    highlight_rows = highlight_rows_attr,
+                    color = if (is.character(highlight_color_attr) && length(highlight_color_attr) == 1L) highlight_color_attr else "col_red"
+                )
             }
             out <- .strip_repeated_class_rows(out)
             if (isTRUE(show_ncol)) {

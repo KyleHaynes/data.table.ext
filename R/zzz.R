@@ -1,3 +1,7 @@
+# Columns referenced via data.table's NSE (`:=`, `by =`) inside package
+# functions, not actual free variables.
+utils::globalVariables(c("N", "pct", ".dupe_group", ".dupe_n", "outlier_cols", "n_cols"))
+
 .onAttach <- function(libname, pkgname) {
     turn_everyone_on()
 

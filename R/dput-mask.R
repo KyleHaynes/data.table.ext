@@ -22,6 +22,7 @@ enable_dt_dput_mask <- function() {
 
         # .internal.selfref is a C-level external pointer that can't be removed
         # via attr<- or setattr. Capture the raw dput text and strip it with regex.
+        dput_lines <- NULL
         tmp <- textConnection("dput_lines", open = "w", local = TRUE)
         on.exit(try(close(tmp), silent = TRUE), add = TRUE)
         if (missing(control)) {

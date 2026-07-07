@@ -182,7 +182,7 @@ e <- function(expr) {
     }
 
     selected <- tryCatch(
-        data.table::as.data.table(setNames(lapply(selected_names, function(col_name) table[[col_name]]), selected_names)),
+        data.table::as.data.table(stats::setNames(lapply(selected_names, function(col_name) table[[col_name]]), selected_names)),
         error = function(e) NULL
     )
     if (!is.null(selected)) {
@@ -312,6 +312,107 @@ cdt <- function(dt, group = NULL, color = .sample_dt_color_default(), sort_cover
     }
 
     .group_display_table(dt, group_col = group_col, color = color, sort_coverage = sort_coverage, color_threshold = color_threshold)
+}
+
+#' Highlight rows matching a condition when printed
+#'
+#' Evaluates `condition` in the context of `dt` and tags matching rows so
+#' `enable_dt_print_thousands()` colors the entire row when the table is
+#' printed. Useful for surfacing anomalies (outliers, QA failures, rows of
+#' interest) directly in normal console output.
+#'
+#' @param dt A data.table.
+#' @param condition A logical expression evaluated in the context of `dt`
+#'   (for example `Sepal.Length > 7`), or a logical vector the same length as
+#'   `nrow(dt)`.
+#' @param color Character scalar naming a `cli` color helper (for example
+#'   `"col_red"`, the default) or `"red"` (the `col_` prefix is added
+#'   automatically).
+#'
+#' @return `dt`, tagged with highlight-print attributes.
+#' @export
+highlight_dt <- function(dt, condition, color = "col_red") {
+    if (!data.table::is.data.table(dt)) {
+        stop("'dt' must be a data.table.", call. = FALSE)
+    }
+    if (!is.character(color) || length(color) != 1L || is.na(color)) {
+        stop("'color' must be a character scalar.", call. = FALSE)
+    }
+
+    cond_expr <- substitute(condition)
+    cond_value <- eval(cond_expr, envir = dt, enclos = parent.frame())
+
+    if (!is.logical(cond_value) || length(cond_value) != nrow(dt)) {
+        stop("'condition' must evaluate to a logical vector the same length as 'nrow(dt)'.", call. = FALSE)
+    }
+
+    ans <- data.table::copy(dt)
+    setattr(ans, ".highlight_print_rows", which(cond_value))
+    setattr(ans, ".highlight_print_color", color)
+    if (!exists("print.data.table", envir = .GlobalEnv, inherits = FALSE)) {
+        enable_dt_print_thousands()
+    }
+    ans[]
+}
+
+#' Surface duplicate rows
+#'
+#' Returns every row that participates in a duplicate cluster (two or more
+#' rows sharing the same values across `by`), ordered by cluster and tagged
+#' with grouped-print attributes so `enable_dt_print_thousands()` draws
+#' separators and colors between clusters, the same way `cdt()` does.
+#'
+#' @param dt A data.table.
+#' @param by Character vector of column names defining a duplicate. If `NULL`
+#'   (default), all columns are used.
+#' @param color Logical scalar. If `TRUE` (default), tag output for colored
+#'   grouped display.
+#'
+#' @return A data.table of duplicate rows, ordered by cluster, with an added
+#'   `.dupe_group` integer column identifying each cluster. Returns a
+#'   zero-row data.table if no duplicates are found.
+#' @export
+dupe_dt <- function(dt, by = NULL, color = .sample_dt_color_default()) {
+    if (!data.table::is.data.table(dt)) {
+        stop("'dt' must be a data.table.", call. = FALSE)
+    }
+    if (is.null(by)) {
+        by <- names(dt)
+    } else if (!is.character(by)) {
+        stop("'by' must be a character vector of column names.", call. = FALSE)
+    }
+    missing_cols <- setdiff(by, names(dt))
+    if (length(missing_cols)) {
+        stop(sprintf("Column(s) not found in 'dt': %s", paste(missing_cols, collapse = ", ")), call. = FALSE)
+    }
+    if (!isTRUE(color) && !identical(color, FALSE)) {
+        stop("'color' must be TRUE or FALSE.", call. = FALSE)
+    }
+
+    if (!nrow(dt)) {
+        ans <- data.table::copy(dt)
+        ans[, .dupe_group := integer(0L)]
+        return(ans[])
+    }
+
+    ans <- data.table::copy(dt)
+    ans[, .dupe_group := .GRP, by = by]
+    ans[, .dupe_n := .N, by = ".dupe_group"]
+    ans <- ans[ans$.dupe_n > 1L]
+    data.table::set(ans, j = ".dupe_n", value = NULL)
+    data.table::setorderv(ans, ".dupe_group")
+
+    if (nrow(ans)) {
+        setattr(ans, ".group_print_column", ".dupe_group")
+        if (isTRUE(color)) {
+            setattr(ans, ".group_print_color_values", TRUE)
+            setattr(ans, ".group_print_value_mode", "distinct")
+            if (!exists("print.data.table", envir = .GlobalEnv, inherits = FALSE)) {
+                enable_dt_print_thousands()
+            }
+        }
+    }
+    ans[]
 }
 
 #' Turn every enhancement on with defaults
