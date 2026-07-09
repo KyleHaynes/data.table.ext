@@ -483,6 +483,27 @@ md_dt(DT)
 copy_dt(DT)
 ```
 
+### Example 20: Quick EDA helpers
+
+```r
+library(data.table)
+library(data.table.ext)
+
+DT <- as.data.table(iris)
+
+# One row per column: class, distinct count, NA count
+schema_dt(DT)
+
+# NA count/percentage per column
+na_dt(DT)
+
+# Top values in a column, sorted by frequency
+freq_dt(DT, Species)
+
+# Rename columns by reference
+rename_dt(DT, c(sepal_length = "Sepal.Length"))
+```
+
 ## Exported functions
 
 - `enable_dt_print_thousands()`
