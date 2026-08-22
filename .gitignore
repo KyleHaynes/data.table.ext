@@ -1,0 +1,10 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rcheck/
+*.tar.gz
+inst/doc
+docs
+.DS_Store
+.claude/settings.local.json

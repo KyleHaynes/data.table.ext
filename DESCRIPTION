@@ -1,0 +1,18 @@
+Package: duckdt
+Title: Query DuckDB Using data.table Syntax
+Version: 0.0.0.9000
+Authors@R: person("Kyle", "Haynes", email = "kyle@kylehaynes.com.au", role = c("aut", "cre"))
+Description: Provides a data.table-style '[i, j, by]' interface backed by DuckDB.
+    Expressions are translated to SQL and executed inside DuckDB, so data never
+    needs to be pulled into R until the result is materialized as a data.table.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Imports:
+    DBI,
+    duckdb,
+    data.table
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
