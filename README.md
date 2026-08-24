@@ -48,11 +48,30 @@ as.data.table(d)   # SELECT * FROM <table>, materialized in R
 
 ## What's translated
 
-- **`i`**: `==`, `!=`, `<`, `<=`, `>`, `>=`, `&`, `|`, `!`, `%in%`, `%between%`,
-  `is.na()`, arithmetic, and common scalar functions.
+- **`i`**: `==`, `!=`, `<`, `<=`, `>`, `>=`, `&`, `|`, `!`, `%in%`, `%chin%`,
+  `%between%`, `%like%`, `%ilike%`, `%flike%`, `%plike%`, `is.na()`, arithmetic,
+  and common scalar functions.
 - **`j`**: bare column, `.(...)`/`list(...)` for select/rename/compute, aggregates
   (`sum`, `mean`, `min`, `max`, `sd`, `var`, `median`, `.N`, ...).
 - **`by`**: bare column, character vector, or `.(...)`/`list(...)`/`c(...)`.
+
+Notes on the `%like%` family: like data.table, these are **regex** matches (not
+SQL `LIKE` wildcard syntax) except `%flike%`, which is a literal substring match.
+They translate to DuckDB's `regexp_matches()`/`contains()`. DuckDB's regex engine
+(RE2) doesn't support PCRE backreferences or lookaround, so `%plike%` is a
+best-effort alias of `%like%` rather than true Perl-regex support.
+
+## Peeking and sampling
+
+```r
+head(d, 3)          # SELECT * ... LIMIT 3
+tail(d, 3)           # SELECT * ... LIMIT 3 OFFSET (nrow - 3)
+duckdt_sample(d, 5)  # SELECT * ... USING SAMPLE reservoir(5 ROWS)
+```
+
+`tail()` reflects DuckDB's current scan order rather than a guaranteed original
+row order, since DuckDB tables are unordered without an explicit `ORDER BY` (see
+the row-position caveat below).
 
 ## Not yet supported
 
@@ -60,6 +79,9 @@ as.data.table(d)   # SELECT * FROM <table>, materialized in R
 - Row-position indexing in `i` (e.g. `d[1:5]`) — DuckDB tables are unordered, so this
   isn't meaningful without an explicit sort; filter on a column instead.
 - Grouped `:=` (`by=` together with a write).
+- `duckdt_sample(x, n, replace = TRUE)` — DuckDB's sampling clause doesn't support
+  sampling with replacement; only `replace = FALSE` (the default, and only) behavior
+  is available.
 
 ## Design notes
 

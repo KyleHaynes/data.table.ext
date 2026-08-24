@@ -52,6 +52,27 @@ translate_between <- function(expr, cols, env, conn) {
          " AND ", translate_literal(bounds[2], conn))
 }
 
+# %like%/%ilike%/%plike% are regex matches in data.table (not SQL LIKE wildcard
+# syntax), so they map onto DuckDB's regexp_matches() rather than the SQL LIKE
+# keyword. DuckDB's regex engine (RE2) doesn't support PCRE backreferences or
+# lookaround, so %plike% is a best-effort alias of %like%.
+translate_regex_like <- function(expr, cols, env, conn, options = NULL) {
+  lhs <- translate_expr(expr[[2]], cols, env, conn)
+  pattern_sql <- translate_literal(eval(expr[[3]], envir = env), conn)
+  if (is.null(options)) {
+    paste0("regexp_matches(", lhs, ", ", pattern_sql, ")")
+  } else {
+    paste0("regexp_matches(", lhs, ", ", pattern_sql, ", ", translate_literal(options, conn), ")")
+  }
+}
+
+# %flike% is a fixed (literal) substring match, i.e. grepl(..., fixed = TRUE).
+translate_flike <- function(expr, cols, env, conn) {
+  lhs <- translate_expr(expr[[2]], cols, env, conn)
+  pattern_sql <- translate_literal(eval(expr[[3]], envir = env), conn)
+  paste0("contains(", lhs, ", ", pattern_sql, ")")
+}
+
 translate_call_default <- function(expr, fn, cols, env, conn) {
   sql_fn <- FN_MAP[[fn]]
   if (is.null(sql_fn)) sql_fn <- toupper(fn)
@@ -96,7 +117,12 @@ translate_expr <- function(expr, cols, env, conn) {
       "||" = binop(expr, "OR", cols, env, conn),
       "!"  = paste0("NOT (", translate_expr(expr[[2]], cols, env, conn), ")"),
       "%in%" = translate_in(expr, cols, env, conn),
+      "%chin%" = translate_in(expr, cols, env, conn),
       "%between%" = translate_between(expr, cols, env, conn),
+      "%like%" = translate_regex_like(expr, cols, env, conn),
+      "%ilike%" = translate_regex_like(expr, cols, env, conn, options = "i"),
+      "%flike%" = translate_flike(expr, cols, env, conn),
+      "%plike%" = translate_regex_like(expr, cols, env, conn),
       "is.na" = paste0(translate_expr(expr[[2]], cols, env, conn), " IS NULL"),
       "+" = arith(expr, "+", cols, env, conn),
       "-" = arith(expr, "-", cols, env, conn),

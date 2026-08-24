@@ -40,6 +40,20 @@ test_that("is.na() translates to IS NULL", {
   expect_equal(nrow(out) + nrow(d[!is.na(opt)]), nrow(d))
 })
 
+test_that("%like%/%ilike%/%flike%/%plike%/%chin% translate correctly", {
+  ref <- data.table::as.data.table(datasets::mtcars, keep.rownames = "car")
+  d <- mtcars_dt()
+
+  expect_same_rows(d[car %like% "^Merc"], ref[car %like% "^Merc"])
+  expect_same_rows(d[car %ilike% "^merc"], ref[car %ilike% "^merc"])
+  expect_same_rows(d[car %flike% "Merc 450"], ref[car %like% "Merc 450"])
+  expect_same_rows(d[car %plike% "^Merc"], ref[car %like% "^Merc"])
+  expect_same_rows(
+    d[car %chin% c("Valiant", "Duster 360")],
+    ref[car %chin% c("Valiant", "Duster 360")]
+  )
+})
+
 test_that("string equality filter works", {
   d <- mtcars_dt()
   out <- d[car == "Datsun 710"]
