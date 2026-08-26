@@ -39,3 +39,26 @@ test_that("duckdt_sample() clamps n to the row count", {
 
   expect_equal(nrow(duckdt_sample(d, nr + 10)), nr)
 })
+
+# mssql SQL-text generation: no real SQL Server is available in this
+# environment, so these check the generated SQL string shape directly
+# rather than executing it (T-SQL's TOP/OFFSET-FETCH/NEWID() syntax isn't
+# valid against a duckdb connection).
+
+test_that("duckdt_limit_sql() emits TOP for mssql, LIMIT for duckdb", {
+  expect_equal(duckdt_limit_sql('"t"', 5, "mssql"), 'SELECT TOP (5) * FROM "t"')
+  expect_equal(duckdt_limit_sql('"t"', 5, "duckdb"), 'SELECT * FROM "t" LIMIT 5')
+})
+
+test_that("duckdt_tail_sql() emits OFFSET/FETCH with a constant ORDER BY for mssql", {
+  expect_equal(
+    duckdt_tail_sql('"t"', 5, 27, "mssql"),
+    'SELECT * FROM "t" ORDER BY (SELECT NULL) OFFSET 27 ROWS FETCH NEXT 5 ROWS ONLY'
+  )
+  expect_equal(duckdt_tail_sql('"t"', 5, 27, "duckdb"), 'SELECT * FROM "t" LIMIT 5 OFFSET 27')
+})
+
+test_that("duckdt_sample_sql() emits TOP/ORDER BY NEWID() for mssql", {
+  expect_equal(duckdt_sample_sql('"t"', 5, "mssql"), 'SELECT TOP (5) * FROM "t" ORDER BY NEWID()')
+  expect_equal(duckdt_sample_sql('"t"', 5, "duckdb"), 'SELECT * FROM "t" USING SAMPLE reservoir(5 ROWS)')
+})

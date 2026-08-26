@@ -46,7 +46,8 @@ print.duckdt <- function(x, n = 6L, ...) {
     if (isTRUE(x$materialized)) "" else " (view)"
   ))
   cat("Columns:", paste(cols, collapse = ", "), "\n")
-  preview <- DBI::dbGetQuery(x$conn, paste0("SELECT * FROM ", duckdt_qtbl(x), " LIMIT ", n))
+  preview_sql <- duckdt_limit_sql(duckdt_qtbl(x), n, duckdt_dialect(x$conn))
+  preview <- DBI::dbGetQuery(x$conn, preview_sql)
   print(data.table::setDT(preview))
   invisible(x)
 }

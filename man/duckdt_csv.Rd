@@ -23,5 +23,7 @@ A \code{"duckdt"} object (a view, i.e. not writable via \verb{:=}).
 \description{
 Creates a lazy DuckDB view over the file using \code{read_csv_auto} — the file
 is not read into R; querying is pushed down and executed out-of-core in
-DuckDB, \code{fread}-style ergonomics included.
+DuckDB, \code{fread}-style ergonomics included. This is inherently DuckDB-only
+(there's no MS SQL Server equivalent of \code{read_csv_auto}); the resulting
+\code{"duckdt"} handle can still be pointed at from a DuckDB connection only.
 }

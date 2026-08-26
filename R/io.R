@@ -2,7 +2,9 @@
 #'
 #' Creates a lazy DuckDB view over the file using `read_csv_auto` — the file
 #' is not read into R; querying is pushed down and executed out-of-core in
-#' DuckDB, `fread`-style ergonomics included.
+#' DuckDB, `fread`-style ergonomics included. This is inherently DuckDB-only
+#' (there's no MS SQL Server equivalent of `read_csv_auto`); the resulting
+#' `"duckdt"` handle can still be pointed at from a DuckDB connection only.
 #'
 #' @param path Path to one or more CSV files.
 #' @param conn A `DBI` connection to DuckDB; a new in-memory one is created

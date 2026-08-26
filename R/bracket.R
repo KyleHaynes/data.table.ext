@@ -29,14 +29,15 @@
   env <- parent.frame()
   conn <- x$conn
   cols <- duckdt_columns(x)
+  dialect <- duckdt_dialect(conn)
 
   if (has_j && is.call(je) && identical(je[[1]], as.name(":="))) {
     return(duckdt_mutate(x, ie, je, has_i, has_by, cols, env))
   }
 
-  where_sql <- if (has_i) translate_expr(ie, cols, env, conn) else NULL
-  by_res <- if (has_by) translate_by(bye, cols, env, conn) else NULL
-  sel_res <- if (has_j) translate_select(je, cols, env, conn) else NULL
+  where_sql <- if (has_i) translate_expr(ie, cols, env, conn, dialect) else NULL
+  by_res <- if (has_by) translate_by(bye, cols, env, conn, dialect) else NULL
+  sel_res <- if (has_j) translate_select(je, cols, env, conn, dialect) else NULL
 
   parts <- character(0)
   if (!is.null(by_res)) parts <- c(parts, by_res$parts)

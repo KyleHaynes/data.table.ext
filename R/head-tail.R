@@ -16,12 +16,23 @@
 #' @name duckdt-head-tail
 NULL
 
+# Shared by head.duckdt() and print.duckdt(): a plain "first n rows" query,
+# rendered per-dialect since MS SQL Server has no LIMIT clause.
+duckdt_limit_sql <- function(qtbl, n, dialect) {
+  if (dialect == "mssql") {
+    paste0("SELECT TOP (", as.integer(n), ") * FROM ", qtbl)
+  } else {
+    paste0("SELECT * FROM ", qtbl, " LIMIT ", as.integer(n))
+  }
+}
+
 #' @rdname duckdt-head-tail
 #' @exportS3Method utils::head
 head.duckdt <- function(x, n = 6L, ...) {
   nr <- dim(x)[1]
   n <- if (n < 0) max(nr + n, 0) else min(n, nr)
-  sql <- paste0("SELECT * FROM ", duckdt_qtbl(x), " LIMIT ", as.integer(n))
+  dialect <- duckdt_dialect(x$conn)
+  sql <- duckdt_limit_sql(duckdt_qtbl(x), n, dialect)
   data.table::setDT(DBI::dbGetQuery(x$conn, sql))
 }
 
@@ -31,8 +42,23 @@ tail.duckdt <- function(x, n = 6L, ...) {
   nr <- dim(x)[1]
   n <- if (n < 0) max(nr + n, 0) else min(n, nr)
   off <- max(nr - n, 0)
-  sql <- paste0("SELECT * FROM ", duckdt_qtbl(x), " LIMIT ", as.integer(n), " OFFSET ", as.integer(off))
+  dialect <- duckdt_dialect(x$conn)
+  sql <- duckdt_tail_sql(duckdt_qtbl(x), n, off, dialect)
   data.table::setDT(DBI::dbGetQuery(x$conn, sql))
+}
+
+# OFFSET/FETCH requires an ORDER BY in T-SQL; ordering by a constant subquery
+# is the standard way to get an unspecified order, matching DuckDB's own "no
+# ordering guarantee" LIMIT/OFFSET semantics here.
+duckdt_tail_sql <- function(qtbl, n, off, dialect) {
+  if (dialect == "mssql") {
+    paste0(
+      "SELECT * FROM ", qtbl, " ORDER BY (SELECT NULL) OFFSET ",
+      as.integer(off), " ROWS FETCH NEXT ", as.integer(n), " ROWS ONLY"
+    )
+  } else {
+    paste0("SELECT * FROM ", qtbl, " LIMIT ", as.integer(n), " OFFSET ", as.integer(off))
+  }
 }
 
 #' Sample rows from a duckdt table
@@ -51,6 +77,17 @@ tail.duckdt <- function(x, n = 6L, ...) {
 duckdt_sample <- function(x, n) {
   nr <- dim(x)[1]
   n <- min(as.integer(n), nr)
-  sql <- paste0("SELECT * FROM ", duckdt_qtbl(x), " USING SAMPLE reservoir(", n, " ROWS)")
+  dialect <- duckdt_dialect(x$conn)
+  sql <- duckdt_sample_sql(duckdt_qtbl(x), n, dialect)
   data.table::setDT(DBI::dbGetQuery(x$conn, sql))
+}
+
+# T-SQL's TABLESAMPLE is page-based/approximate and can't guarantee an exact
+# row count; ORDER BY NEWID() is the standard exact-n-row random sample idiom.
+duckdt_sample_sql <- function(qtbl, n, dialect) {
+  if (dialect == "mssql") {
+    paste0("SELECT TOP (", n, ") * FROM ", qtbl, " ORDER BY NEWID()")
+  } else {
+    paste0("SELECT * FROM ", qtbl, " USING SAMPLE reservoir(", n, " ROWS)")
+  }
 }

@@ -73,6 +73,64 @@ duckdt_sample(d, 5)  # SELECT * ... USING SAMPLE reservoir(5 ROWS)
 row order, since DuckDB tables are unordered without an explicit `ORDER BY` (see
 the row-position caveat below).
 
+## MS SQL Server support
+
+`duckdt` also works against a Microsoft SQL Server connection (e.g. via
+`DBI::dbConnect(odbc::odbc(), ...)`) — the dialect is auto-detected from the
+connection object, so no extra argument is needed:
+
+```r
+con <- DBI::dbConnect(odbc::odbc(), driver = "ODBC Driver 18 for SQL Server", ...)
+d <- duckdt(con, "existing_table")
+d[cyl == 6, .(avg_hp = mean(hp), n = .N), by = cyl]
+```
+
+What's identical to the DuckDB path: `i`/`j`/`by` translation for
+comparisons, `&`/`|`/`!`, `%in%`/`%chin%`, `%between%`, `is.na()`,
+arithmetic, and most scalar/aggregate functions.
+
+What's dialect-specific:
+- `median()` compiles to `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ...)`
+  (T-SQL has no `MEDIAN()` aggregate).
+- `head()`/`print()` use `TOP (n)`, `tail()` uses
+  `ORDER BY (SELECT NULL) OFFSET ... FETCH NEXT ...`, and `duckdt_sample()`
+  uses `ORDER BY NEWID()` (SQL Server has no `LIMIT`/`OFFSET` or exact-row
+  `TABLESAMPLE`).
+- `%flike%` (literal substring) uses `CHARINDEX(...) > 0`.
+
+What's **not** supported against MS SQL Server:
+- `%like%`/`%ilike%`/`%plike%` (regex matching) — T-SQL has no native regex
+  engine; these raise a clear error rather than silently mistranslating.
+- Zero-copy `as.duckdt(x, copy = FALSE)` — registering an R data frame as a
+  view with no copy is a DuckDB-specific mechanism. Use `copy = TRUE`
+  against a SQL Server connection instead.
+- `duckdt_csv()`/`duckdt_parquet()` — these are built on DuckDB's
+  `read_csv_auto`/`read_parquet` table functions and stay DuckDB-only.
+
+`:=` works against SQL Server too, but since T-SQL has neither
+`CREATE OR REPLACE TABLE` nor `* EXCLUDE(...)`, it's emulated with an
+explicit `SELECT ... INTO` rebuild + `sp_rename`, wrapped in a transaction.
+This is not a true atomic replace (e.g. permissions/triggers on the
+original table aren't preserved) — the same class of caveat the DuckDB
+drop+recreate path already carries.
+
+## Visualizing a database
+
+`duckdt_erd()` introspects a connection's tables, columns, primary keys, and
+foreign keys (works against both DuckDB and MS SQL Server) and opens an
+interactive ER diagram in your browser:
+
+```r
+duckdt_erd(con)                            # opens a Mermaid ER diagram in the browser
+duckdt_erd(con, include_row_counts = TRUE) # add a COUNT(*) per table (can be slow)
+```
+
+Foreign keys are only shown when the database actually declares them as
+constraints — this doesn't guess relationships from column-naming
+conventions. The returned path also carries the raw Mermaid diagram source
+as its `"mermaid"` attribute, so it can be dropped straight into an
+Rmd/Quarto ```` ```mermaid ```` code chunk instead.
+
 ## Not yet supported
 
 - Lazy/chained query building — every `[` runs immediately (by design, see below).

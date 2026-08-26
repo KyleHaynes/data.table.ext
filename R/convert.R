@@ -31,6 +31,13 @@ as.duckdt <- function(x, conn = NULL, name = NULL, overwrite = FALSE, copy = FAL
     DBI::dbWriteTable(conn, name, x, overwrite = overwrite)
     materialized <- TRUE
   } else {
+    if (duckdt_dialect(conn) != "duckdb") {
+      stop(
+        "duckdt: zero-copy registration (`copy = FALSE`) is only supported ",
+        "for DuckDB connections. Pass `copy = TRUE` to physically write `x` ",
+        "into this connection instead.", call. = FALSE
+      )
+    }
     if (overwrite) {
       try(duckdb::duckdb_unregister(conn, name), silent = TRUE)
     }
