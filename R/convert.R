@@ -59,5 +59,7 @@ as.duckdt <- function(x, conn = NULL, name = NULL, overwrite = FALSE, copy = FAL
 #' @importFrom data.table as.data.table
 #' @exportS3Method data.table::as.data.table
 as.data.table.duckdt <- function(x, ...) {
-  data.table::setDT(DBI::dbGetQuery(x$conn, paste0("SELECT * FROM ", duckdt_qtbl(x))))
+  # `[]` works around a data.table quirk where setDT() suppresses the next
+  # top-level auto-print (see the note in bracket.R).
+  data.table::setDT(DBI::dbGetQuery(x$conn, paste0("SELECT * FROM ", duckdt_qtbl(x))))[]
 }

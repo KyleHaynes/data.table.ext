@@ -69,26 +69,23 @@ translate_between <- function(expr, cols, env, conn, dialect) {
 }
 
 # %like%/%ilike%/%plike% are regex matches in data.table (not SQL LIKE wildcard
-# syntax), so they map onto DuckDB's regexp_matches() rather than the SQL LIKE
-# keyword. DuckDB's regex engine (RE2) doesn't support PCRE backreferences or
-# lookaround, so %plike% is a best-effort alias of %like%. MS SQL Server has
-# no native regex engine at all, so these fail loudly there instead of
-# silently mistranslating.
+# syntax), so they map onto a regex function rather than the SQL LIKE
+# keyword: DuckDB's regexp_matches(), or (as of SQL Server 2025 / Azure SQL
+# DB, Fabric SQL DB -- database compatibility level 170+) T-SQL's native
+# REGEXP_LIKE(). Both engines happen to use Google's RE2 as their regex
+# engine, so the same pattern text works on either and neither supports PCRE
+# backreferences/lookaround -- %plike% is a best-effort alias of %like% on
+# both. Against an older SQL Server (compat level < 170, no REGEXP_LIKE),
+# this will surface as a plain "not a recognized built-in function name"
+# error from the server itself.
 translate_regex_like <- function(expr, cols, env, conn, dialect, options = NULL) {
-  if (dialect == "mssql") {
-    stop(
-      "duckdt: %like%/%ilike%/%plike% (regex matching) are not supported ",
-      "against MS SQL Server connections (no native regex engine). Use ",
-      "%flike% for literal substring matching, or write raw SQL.",
-      call. = FALSE
-    )
-  }
   lhs <- translate_expr(expr[[2]], cols, env, conn, dialect)
   pattern_sql <- translate_literal(eval(expr[[3]], envir = env), conn, dialect)
+  fn <- if (dialect == "mssql") "REGEXP_LIKE" else "regexp_matches"
   if (is.null(options)) {
-    paste0("regexp_matches(", lhs, ", ", pattern_sql, ")")
+    paste0(fn, "(", lhs, ", ", pattern_sql, ")")
   } else {
-    paste0("regexp_matches(", lhs, ", ", pattern_sql, ", ", translate_literal(options, conn, dialect), ")")
+    paste0(fn, "(", lhs, ", ", pattern_sql, ", ", translate_literal(options, conn, dialect), ")")
   }
 }
 

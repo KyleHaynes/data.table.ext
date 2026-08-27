@@ -24,12 +24,11 @@ diagram source is attached as the \code{"mermaid"} attribute, so it can be
 dropped directly into an Rmd/Quarto \verb{```mermaid} code chunk.
 }
 \description{
-Introspects \code{conn}'s tables, columns, primary keys, and foreign keys via
-the portable \code{information_schema} views (works against both DuckDB and MS
-SQL Server connections), renders them as a Mermaid \code{erDiagram}, and opens
-the result as a self-contained HTML page in the system browser. Useful for
-quickly seeing what tables are available in a database and how they
-connect, without writing any SQL yourself.
+Builds on \code{\link[=duckdt_tables]{duckdt_tables()}}, \code{\link[=duckdt_schema]{duckdt_schema()}}, and \code{\link[=duckdt_relationships]{duckdt_relationships()}}
+to render a Mermaid \code{erDiagram} and open it as a self-contained HTML page
+in the system browser. Useful for quickly seeing what tables are
+available in a database and how they connect, without writing any SQL
+yourself. Works against both DuckDB and MS SQL Server connections.
 }
 \details{
 Foreign keys are only detected when the database actually declares them as

@@ -40,6 +40,27 @@ d[, kw := hp * 0.7457]                # add a computed column
 d[cyl == 6, kw := kw * 1.1]           # update matching rows only
 ```
 
+`duckdt_merge()` merges a subset (`data.frame`/`data.table`, or another `"duckdt"`
+table/view/query result) into a **materialized** table -- entirely inside the
+database. `y` is staged into a temporary table on `x`'s connection first, so `x`'s
+existing data never round-trips through R; matching rows are updated, unmatched `y`
+rows are inserted, and (opt-in) unmatched `x` rows can be deleted:
+
+```r
+d <- as.duckdt(mtcars, copy = TRUE)
+patch <- data.frame(car = c("Mazda RX4", "New Car"), hp = c(999, 111))
+duckdt_merge(d, patch, by = "car")                    # update matches, insert new rows
+duckdt_merge(d, patch, by = "car", insert = FALSE)     # update only, skip new rows
+duckdt_merge(d, patch, by = "car", delete = TRUE)      # + delete rows not in `patch`
+```
+
+On DuckDB this compiles to `UPDATE ... FROM` + an anti-join `INSERT` (+ an anti-join
+`DELETE` if `delete = TRUE`), wrapped in a transaction. On MS SQL Server it compiles
+to a single native T-SQL `MERGE` statement. If `by` is omitted it defaults to every
+column shared between `x` and `y` (a natural join, like base `merge()`) -- pass `by=`
+explicitly whenever `y` carries value columns that should be updated rather than
+matched on.
+
 ## Getting data out
 
 ```r
@@ -97,10 +118,17 @@ What's dialect-specific:
   uses `ORDER BY NEWID()` (SQL Server has no `LIMIT`/`OFFSET` or exact-row
   `TABLESAMPLE`).
 - `%flike%` (literal substring) uses `CHARINDEX(...) > 0`.
+- `%like%`/`%ilike%`/`%plike%` (regex matching) compile to T-SQL's native
+  `REGEXP_LIKE()` instead of DuckDB's `regexp_matches()`. Both engines use
+  Google's RE2 as their regex engine, so the same pattern text works on
+  either, and `%plike%` is a best-effort alias of `%like%` on both (RE2
+  doesn't support PCRE backreferences/lookaround). **`REGEXP_LIKE()` requires
+  SQL Server 2025 (or Azure SQL Database/Managed Instance/Fabric SQL DB) and
+  database compatibility level 170+** — against an older SQL Server this
+  surfaces as a plain "not a recognized built-in function name" error from
+  the server itself.
 
 What's **not** supported against MS SQL Server:
-- `%like%`/`%ilike%`/`%plike%` (regex matching) — T-SQL has no native regex
-  engine; these raise a clear error rather than silently mistranslating.
 - Zero-copy `as.duckdt(x, copy = FALSE)` — registering an R data frame as a
   view with no copy is a DuckDB-specific mechanism. Use `copy = TRUE`
   against a SQL Server connection instead.
@@ -114,22 +142,45 @@ This is not a true atomic replace (e.g. permissions/triggers on the
 original table aren't preserved) — the same class of caveat the DuckDB
 drop+recreate path already carries.
 
-## Visualizing a database
+`duckdt_merge()` works against SQL Server too — since T-SQL has a native
+`MERGE` statement, that path is actually simpler than DuckDB's: the staged
+subset and a single `MERGE INTO ... USING ... ON (...) WHEN MATCHED ...`
+statement, rather than DuckDB's separate `UPDATE`/`INSERT`/`DELETE`.
 
-`duckdt_erd()` introspects a connection's tables, columns, primary keys, and
-foreign keys (works against both DuckDB and MS SQL Server) and opens an
-interactive ER diagram in your browser:
+## Exploring a database
+
+Four functions introspect a connection (works against both DuckDB and MS SQL
+Server, via the portable ANSI `information_schema` views) to answer "what
+tables are in this database, what do they look like, and how do they
+connect" — all accept either a raw `DBI` connection or a `"duckdt"` object.
+
+```r
+duckdt_tables(con)         # every table/view: schema, name, type
+duckdt_schema(con)         # every column: schema, table, column, type, primary_key
+duckdt_schema(con, table = "orders")  # ...or just one table's columns
+duckdt_relationships(con)  # declared foreign keys: fk_schema/table/column -> pk_schema/table/column
+```
+
+Each returns a plain `data.table`, so they compose with the rest of the
+package/data.table normally, e.g. `duckdt_schema(con)[primary_key == TRUE]`
+or `duckdt_relationships(con)[pk_table == "orders"]` to see what references a
+given table. Foreign keys are only reported when the database actually
+declares them as constraints — none of this guesses relationships from
+column-naming conventions, and `duckdt_relationships()` returns a zero-row
+`data.table` (rather than erroring) if the connected database/version
+doesn't expose the constraint views.
+
+`duckdt_erd()` builds on these three to render a Mermaid ER diagram and open
+it as a self-contained HTML page in your browser:
 
 ```r
 duckdt_erd(con)                            # opens a Mermaid ER diagram in the browser
 duckdt_erd(con, include_row_counts = TRUE) # add a COUNT(*) per table (can be slow)
 ```
 
-Foreign keys are only shown when the database actually declares them as
-constraints — this doesn't guess relationships from column-naming
-conventions. The returned path also carries the raw Mermaid diagram source
-as its `"mermaid"` attribute, so it can be dropped straight into an
-Rmd/Quarto ```` ```mermaid ```` code chunk instead.
+The returned path also carries the raw Mermaid diagram source as its
+`"mermaid"` attribute, so it can be dropped straight into an Rmd/Quarto
+```` ```mermaid ```` code chunk instead.
 
 ## Not yet supported
 

@@ -33,7 +33,9 @@ head.duckdt <- function(x, n = 6L, ...) {
   n <- if (n < 0) max(nr + n, 0) else min(n, nr)
   dialect <- duckdt_dialect(x$conn)
   sql <- duckdt_limit_sql(duckdt_qtbl(x), n, dialect)
-  data.table::setDT(DBI::dbGetQuery(x$conn, sql))
+  # `[]` works around a data.table quirk where setDT() suppresses the next
+  # top-level auto-print (see the note in bracket.R).
+  data.table::setDT(DBI::dbGetQuery(x$conn, sql))[]
 }
 
 #' @rdname duckdt-head-tail
@@ -44,7 +46,7 @@ tail.duckdt <- function(x, n = 6L, ...) {
   off <- max(nr - n, 0)
   dialect <- duckdt_dialect(x$conn)
   sql <- duckdt_tail_sql(duckdt_qtbl(x), n, off, dialect)
-  data.table::setDT(DBI::dbGetQuery(x$conn, sql))
+  data.table::setDT(DBI::dbGetQuery(x$conn, sql))[]
 }
 
 # OFFSET/FETCH requires an ORDER BY in T-SQL; ordering by a constant subquery
@@ -79,7 +81,7 @@ duckdt_sample <- function(x, n) {
   n <- min(as.integer(n), nr)
   dialect <- duckdt_dialect(x$conn)
   sql <- duckdt_sample_sql(duckdt_qtbl(x), n, dialect)
-  data.table::setDT(DBI::dbGetQuery(x$conn, sql))
+  data.table::setDT(DBI::dbGetQuery(x$conn, sql))[]
 }
 
 # T-SQL's TABLESAMPLE is page-based/approximate and can't guarantee an exact

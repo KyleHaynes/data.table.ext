@@ -75,13 +75,29 @@ test_that("%flike% uses CHARINDEX for mssql, contains() for duckdb", {
   )
 })
 
-test_that("%like%/%ilike%/%plike% error clearly against mssql", {
+test_that("%like%/%ilike%/%plike% use REGEXP_LIKE() for mssql, regexp_matches() for duckdb", {
   con <- DBI::dbConnect(duckdb::duckdb())
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
   cols <- c("name")
   env <- environment()
+  qname <- as.character(DBI::dbQuoteIdentifier(con, "name"))
+  qpat <- as.character(DBI::dbQuoteString(con, "a.*"))
+  qi <- as.character(DBI::dbQuoteString(con, "i"))
 
-  expect_error(translate_expr(quote(name %like% "a.*"), cols, env, con, "mssql"), "regex")
-  expect_error(translate_expr(quote(name %ilike% "a.*"), cols, env, con, "mssql"), "regex")
-  expect_error(translate_expr(quote(name %plike% "a.*"), cols, env, con, "mssql"), "regex")
+  expect_equal(
+    translate_expr(quote(name %like% "a.*"), cols, env, con, "mssql"),
+    paste0("REGEXP_LIKE(", qname, ", ", qpat, ")")
+  )
+  expect_equal(
+    translate_expr(quote(name %ilike% "a.*"), cols, env, con, "mssql"),
+    paste0("REGEXP_LIKE(", qname, ", ", qpat, ", ", qi, ")")
+  )
+  expect_equal(
+    translate_expr(quote(name %plike% "a.*"), cols, env, con, "mssql"),
+    paste0("REGEXP_LIKE(", qname, ", ", qpat, ")")
+  )
+  expect_equal(
+    translate_expr(quote(name %like% "a.*"), cols, env, con, "duckdb"),
+    paste0("regexp_matches(", qname, ", ", qpat, ")")
+  )
 })

@@ -57,5 +57,10 @@
   if (!is.null(where_sql)) sql <- paste0(sql, " WHERE ", where_sql)
   if (!is.null(by_res)) sql <- paste0(sql, " GROUP BY ", paste(by_res$parts, collapse = ", "))
 
-  data.table::setDT(DBI::dbGetQuery(conn, sql))
+  # `[]` after setDT() works around a well-known data.table quirk: setDT()
+  # marks the object so its *next* auto-print at the top level is silently
+  # skipped (the same mechanism `:=` uses). `[]` forces a normal print-able
+  # copy so `d[cyl == 6]` at the console (or in a function returning this
+  # value) actually prints instead of appearing to do nothing.
+  data.table::setDT(DBI::dbGetQuery(conn, sql))[]
 }
