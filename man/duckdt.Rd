@@ -4,7 +4,7 @@
 \alias{duckdt}
 \title{Wrap an existing DuckDB table or view as a duckdt handle}
 \usage{
-duckdt(conn, table, materialized = NA)
+duckdt(conn, table, materialized = NA, writable = FALSE)
 }
 \arguments{
 \item{conn}{A \code{DBI} connection to a DuckDB database, e.g. from
@@ -15,6 +15,10 @@ duckdt(conn, table, materialized = NA)
 \item{materialized}{Is \code{table} a real, mutable base table (\code{TRUE}) as
 opposed to a read-only view (\code{FALSE})? Only materialized tables support
 \verb{:=} writes. \code{NA} (the default) auto-detects via \code{information_schema}.}
+
+\item{writable}{Allow \verb{:=} and \code{\link[=duckdt_merge]{duckdt_merge()}} to write through this
+handle? Default \code{FALSE} (see Details). Has no effect if \code{materialized}
+is/resolves to \code{FALSE} -- views are never writable regardless.}
 }
 \value{
 An object of class \code{"duckdt"}.
@@ -24,4 +28,13 @@ An object of class \code{"duckdt"}.
 every operation on them (\code{[}, \code{print}, \code{dim}, ...) issues SQL against
 \code{conn}. Most users will start from \code{\link[=as.duckdt]{as.duckdt()}}, \code{\link[=duckdt_csv]{duckdt_csv()}}, or
 \code{\link[=duckdt_parquet]{duckdt_parquet()}} instead of calling this directly.
+}
+\details{
+Handles created here default to \strong{read-only}: \verb{:=} and \code{\link[=duckdt_merge]{duckdt_merge()}}
+both refuse to run against them, even if \code{table} is a materialized base
+table capable of being written to. This guards against accidentally
+mutating a table you only meant to explore -- e.g. after reconnecting to
+a persistent \code{.duckdb} file. Pass \code{writable = TRUE} once you actually mean
+to write. (Handles from \code{\link[=as.duckdt]{as.duckdt()}} are writable immediately, since you
+just created that table in the same call.)
 }

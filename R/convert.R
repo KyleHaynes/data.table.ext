@@ -3,8 +3,16 @@
 #' By default this is a **zero-copy** operation: [duckdb::duckdb_register()]
 #' registers `x` as a virtual view directly over the R object, with no
 #' serialization. Pass `copy = TRUE` to instead physically write the data
-#' into DuckDB via [DBI::dbWriteTable()], which is required if you want to
-#' use `:=` to mutate the result independently of `x`.
+#' into DuckDB, which is required if you want to use `:=` to mutate the
+#' result independently of `x`.
+#'
+#' List-columns (e.g. `tags = list(c("a", "b"), "c")`) are supported against
+#' DuckDB connections, both zero-copy and with `copy = TRUE`: they round-trip
+#' to/from DuckDB's native `LIST` type, and come back as an R list-column
+#' from [as.data.table()] with no extra steps. As with DuckDB's `LIST` type
+#' itself, every element within one list-column must coerce to a single
+#' atomic type. List-columns are not supported against MS SQL Server
+#' connections.
 #'
 #' @param x A `data.frame` or `data.table`.
 #' @param conn A `DBI` connection to DuckDB. If `NULL` (the default), a new
@@ -16,7 +24,9 @@
 #'   writable). If `FALSE` (default), register `x` as a zero-copy view
 #'   (read-only).
 #'
-#' @return A `"duckdt"` object.
+#' @return A `"duckdt"` object, writable immediately (unlike [duckdt()]'s
+#'   read-only-by-default handles -- you just created this table, so there's
+#'   nothing accidental about writing to it).
 #' @export
 as.duckdt <- function(x, conn = NULL, name = NULL, overwrite = FALSE, copy = FALSE) {
   stopifnot(is.data.frame(x))
@@ -28,7 +38,18 @@ as.duckdt <- function(x, conn = NULL, name = NULL, overwrite = FALSE, copy = FAL
   }
 
   if (copy) {
-    DBI::dbWriteTable(conn, name, x, overwrite = overwrite)
+    if (duckdt_dialect(conn) == "duckdb") {
+      src_name <- paste0(name, "_src")
+      qsrc <- DBI::dbQuoteIdentifier(conn, src_name)
+      duckdb::duckdb_register(conn, src_name, x)
+      on.exit(try(duckdb::duckdb_unregister(conn, src_name), silent = TRUE), add = TRUE)
+      create_sql <- if (overwrite) "CREATE OR REPLACE TABLE " else "CREATE TABLE "
+      DBI::dbExecute(conn, paste0(
+        create_sql, DBI::dbQuoteIdentifier(conn, name), " AS SELECT * FROM ", qsrc
+      ))
+    } else {
+      DBI::dbWriteTable(conn, name, x, overwrite = overwrite)
+    }
     materialized <- TRUE
   } else {
     if (duckdt_dialect(conn) != "duckdb") {
@@ -45,7 +66,7 @@ as.duckdt <- function(x, conn = NULL, name = NULL, overwrite = FALSE, copy = FAL
     materialized <- FALSE
   }
 
-  duckdt(conn, name, materialized = materialized)
+  duckdt(conn, name, materialized = materialized, writable = TRUE)
 }
 
 #' Pull a duckdt handle fully into a data.table

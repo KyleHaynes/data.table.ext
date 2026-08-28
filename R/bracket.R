@@ -4,8 +4,8 @@
 #' (grouping) into a single SQL query executed in DuckDB, and returns the
 #' result as a `data.table`. `j` may also be a `:=` call, in which case the
 #' underlying DuckDB table is mutated instead (see the write-path notes in
-#' the package README); this requires a materialized table (see
-#' [as.duckdt()]'s `copy` argument).
+#' the package README); this requires a materialized, writable table (see
+#' [as.duckdt()]'s `copy` argument and [duckdt()]'s `writable` argument).
 #'
 #' @param x A `"duckdt"` object.
 #' @param i Optional row filter, e.g. `cyl == 6`.

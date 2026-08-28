@@ -4,6 +4,9 @@ Query [DuckDB](https://duckdb.org/) using [data.table](https://r-datatable.com/)
 `d[i, j, by]` syntax. Expressions are translated to SQL and run inside DuckDB — data
 only comes back to R as a `data.table` once you materialize a result.
 
+Saving a `data.table` to a persistent DuckDB file and reconnecting to it
+later? See [WORKFLOW.md](WORKFLOW.md) for a step-by-step walkthrough.
+
 ```r
 library(duckdt)
 
@@ -30,15 +33,83 @@ duckdt_csv("big_file.csv")            # lazy view over a CSV, out-of-core
 duckdt_parquet("data/*.parquet")      # lazy view over Parquet file(s)
 ```
 
+### List-columns
+
+Against DuckDB connections (not MS SQL Server), `as.duckdt()` round-trips R
+list-columns to/from DuckDB's native `LIST` type, both zero-copy and with
+`copy = TRUE`:
+
+```r
+x <- data.table::data.table(id = 1:2, tags = list(c("a", "b"), "c"))
+d <- as.duckdt(x, copy = TRUE)
+as.data.table(d)$tags   # list(c("a", "b"), "c") -- reconstructed automatically
+```
+
+As with DuckDB's `LIST` type itself, every element within one list-column
+must coerce to a single atomic type -- a column mixing an integer-vector
+cell with a character-vector cell isn't representable as one `LIST` column.
+
+### Connecting to a DuckDB file on disk
+
+By default (e.g. `as.duckdt(mtcars)` with no `conn`) `duckdt` opens an
+in-memory DuckDB database that disappears when the connection closes. To
+persist to (or read from) a database file, open the connection yourself with
+`duckdb::duckdb(dbdir = ...)` and pass it in:
+
+```r
+con <- DBI::dbConnect(duckdb::duckdb(dbdir = "C:/temp/gnafx.duckdb"))
+```
+
+Forward slashes (`"C:/temp/gnafx.duckdb"`) work fine on Windows and avoid
+having to escape backslashes.
+
+List what's in the file with [`duckdt_tables()`](#exploring-a-database), then
+wrap the one you want with `duckdt()`:
+
+```r
+duckdt_tables(con)
+#>    schema       name       type
+#> 1:  main    addresses BASE TABLE
+#> 2:  main         gnaf BASE TABLE
+
+d <- duckdt(con, "gnaf_addresses")   # wraps the existing table, no copy
+d[, .N, by = state]
+```
+
+When you're done, close the connection:
+
+```r
+DBI::dbDisconnect(con, shutdown = TRUE)
+```
+
 ## Writing data
 
-`:=` mutates a **materialized** table in place (create one with `copy = TRUE`):
+`:=` mutates a **materialized, writable** table in place (create one with
+`copy = TRUE`):
 
 ```r
 d <- as.duckdt(mtcars, copy = TRUE)
 d[, kw := hp * 0.7457]                # add a computed column
 d[cyl == 6, kw := kw * 1.1]           # update matching rows only
 ```
+
+Handles from `as.duckdt()` are writable immediately, since you just created
+that table. But `duckdt(conn, table)` -- wrapping a table that already
+existed, e.g. after reconnecting to a file (see
+[Connecting to a DuckDB file on disk](#connecting-to-a-duckdb-file-on-disk))
+-- defaults to **read-only** as a guard against accidental writes: `:=` and
+`duckdt_merge()` both refuse to run until you opt in with `writable = TRUE`:
+
+```r
+d <- duckdt(con, "gnaf")                       # read-only by default
+d[, kw := hp * 0.7457]                         # errors: requires a writable handle
+
+d <- duckdt(con, "gnaf", writable = TRUE)      # explicit opt-in
+d[, kw := hp * 0.7457]                         # now allowed
+```
+
+`print()` flags this: a materialized-but-read-only handle prints
+`<duckdt> gnaf [... rows] (read-only)`.
 
 `duckdt_merge()` merges a subset (`data.frame`/`data.table`, or another `"duckdt"`
 table/view/query result) into a **materialized** table -- entirely inside the

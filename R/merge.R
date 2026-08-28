@@ -18,9 +18,11 @@
 #' and (if `delete = TRUE`) an anti-join `DELETE`, wrapped in a transaction.
 #' On MS SQL Server it compiles to a single native T-SQL `MERGE` statement.
 #'
-#' @param x A `"duckdt"` object backed by a **materialized** table (see
-#'   [as.duckdt()]'s `copy` argument) -- `duckdt_merge()` mutates `x` in
-#'   place, so this can't be a read-only view.
+#' @param x A `"duckdt"` object backed by a **materialized, writable** table
+#'   (see [as.duckdt()]'s `copy` argument, and [duckdt()]'s `writable`
+#'   argument) -- `duckdt_merge()` mutates `x` in place, so this can't be a
+#'   read-only view, nor a handle from `duckdt(conn, table)` that hasn't
+#'   opted into `writable = TRUE`.
 #' @param y The subset to merge in: a `data.frame`/`data.table`, or another
 #'   `"duckdt"` object (table, view, or query result) on the *same*
 #'   connection as `x`. Columns present in `y` but not in `x` are ignored --
@@ -47,6 +49,14 @@ duckdt_merge <- function(x, y, by = NULL, update = TRUE, insert = TRUE, delete =
       "duckdt: `duckdt_merge()` requires a materialized table since it mutates data in place. ",
       "This handle is backed by a read-only view. Use `as.duckdt(x, copy = TRUE)` ",
       "or `duckdt(conn, table)` pointing at a real DuckDB table.",
+      call. = FALSE
+    )
+  }
+  if (!isTRUE(x$writable)) {
+    stop(
+      "duckdt: `duckdt_merge()` requires a writable handle. Handles from `duckdt(conn, table)` ",
+      "are read-only by default to avoid accidental writes -- pass `writable = TRUE` ",
+      "to allow this, e.g. `duckdt(conn, table, writable = TRUE)`.",
       call. = FALSE
     )
   }

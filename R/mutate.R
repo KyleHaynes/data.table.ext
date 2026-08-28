@@ -13,6 +13,14 @@ duckdt_mutate <- function(x, ie, je, has_i, has_by, cols, env) {
       call. = FALSE
     )
   }
+  if (!isTRUE(x$writable)) {
+    stop(
+      "duckdt: `:=` requires a writable handle. Handles from `duckdt(conn, table)` ",
+      "are read-only by default to avoid accidental writes -- pass `writable = TRUE` ",
+      "to allow this, e.g. `duckdt(conn, table, writable = TRUE)`.",
+      call. = FALSE
+    )
+  }
 
   conn <- x$conn
   dialect <- duckdt_dialect(conn)

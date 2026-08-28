@@ -36,3 +36,19 @@ test_that(":= errors when combined with by", {
   d <- mtcars_dt(copy = TRUE)
   expect_error(d[, avg := mean(hp), by = cyl], "not supported")
 })
+
+test_that(":= errors on a duckdt(conn, table) handle by default (read-only guard)", {
+  d <- mtcars_dt(copy = TRUE)
+  wrapped <- duckdt(d$conn, d$tbl)
+  expect_false(wrapped$writable)
+  expect_error(wrapped[, kw := hp * 0.7457], "writable")
+})
+
+test_that(":= works on a duckdt(conn, table) handle with writable = TRUE", {
+  d <- mtcars_dt(copy = TRUE)
+  wrapped <- duckdt(d$conn, d$tbl, writable = TRUE)
+  invisible(wrapped[, kw := hp * 0.7457])
+
+  out <- as.data.table(wrapped)
+  expect_true("kw" %in% names(out))
+})

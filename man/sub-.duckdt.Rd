@@ -27,6 +27,6 @@ Translates \code{i} (row filter), \code{j} (column select/compute), and \code{by
 (grouping) into a single SQL query executed in DuckDB, and returns the
 result as a \code{data.table}. \code{j} may also be a \verb{:=} call, in which case the
 underlying DuckDB table is mutated instead (see the write-path notes in
-the package README); this requires a materialized table (see
-\code{\link[=as.duckdt]{as.duckdt()}}'s \code{copy} argument).
+the package README); this requires a materialized, writable table (see
+\code{\link[=as.duckdt]{as.duckdt()}}'s \code{copy} argument and \code{\link[=duckdt]{duckdt()}}'s \code{writable} argument).
 }

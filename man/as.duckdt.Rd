@@ -22,12 +22,23 @@ writable). If \code{FALSE} (default), register \code{x} as a zero-copy view
 (read-only).}
 }
 \value{
-A \code{"duckdt"} object.
+A \code{"duckdt"} object, writable immediately (unlike \code{\link[=duckdt]{duckdt()}}'s
+read-only-by-default handles -- you just created this table, so there's
+nothing accidental about writing to it).
 }
 \description{
 By default this is a \strong{zero-copy} operation: \code{\link[duckdb:duckdb_register]{duckdb::duckdb_register()}}
 registers \code{x} as a virtual view directly over the R object, with no
 serialization. Pass \code{copy = TRUE} to instead physically write the data
-into DuckDB via \code{\link[DBI:dbWriteTable]{DBI::dbWriteTable()}}, which is required if you want to
-use \verb{:=} to mutate the result independently of \code{x}.
+into DuckDB, which is required if you want to use \verb{:=} to mutate the
+result independently of \code{x}.
+}
+\details{
+List-columns (e.g. \code{tags = list(c("a", "b"), "c")}) are supported against
+DuckDB connections, both zero-copy and with \code{copy = TRUE}: they round-trip
+to/from DuckDB's native \code{LIST} type, and come back as an R list-column
+from \code{\link[=as.data.table]{as.data.table()}} with no extra steps. As with DuckDB's \code{LIST} type
+itself, every element within one list-column must coerce to a single
+atomic type. List-columns are not supported against MS SQL Server
+connections.
 }

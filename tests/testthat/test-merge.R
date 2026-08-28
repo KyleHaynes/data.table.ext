@@ -86,6 +86,20 @@ test_that("duckdt_merge() errors on a read-only (registered) view", {
   expect_error(duckdt_merge(d, data.frame(car = "Mazda RX4", hp = 1), by = "car"), "materialized")
 })
 
+test_that("duckdt_merge() errors on a duckdt(conn, table) handle by default (read-only guard)", {
+  d <- mtcars_dt(copy = TRUE)
+  wrapped <- duckdt(d$conn, d$tbl)
+  expect_error(duckdt_merge(wrapped, data.frame(car = "Mazda RX4", hp = 1), by = "car"), "writable")
+})
+
+test_that("duckdt_merge() works on a duckdt(conn, table) handle with writable = TRUE", {
+  d <- mtcars_dt(copy = TRUE)
+  wrapped <- duckdt(d$conn, d$tbl, writable = TRUE)
+  invisible(duckdt_merge(wrapped, data.frame(car = "Mazda RX4", hp = 999), by = "car"))
+  out <- as.data.table(wrapped)
+  expect_equal(out$hp[out$car == "Mazda RX4"], 999)
+})
+
 test_that("duckdt_merge() errors when update/insert/delete are all FALSE", {
   d <- mtcars_dt(copy = TRUE)
   expect_error(
