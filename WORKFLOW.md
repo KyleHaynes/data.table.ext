@@ -43,16 +43,26 @@ having to escape backslashes.
 
 ## 2. Reconnect later and see what's there
 
-In a new R session (or later in the same one), open the same file again and
-list its tables with [`duckdt_tables()`](README.md#exploring-a-database):
+In a new R session (or later in the same one), open the same file again.
+`duckdt_connect()` is `DBI::dbConnect(duckdb::duckdb(dbdir = ...))` with a
+summary of what it found:
 
 ```r
-con <- DBI::dbConnect(duckdb::duckdb(dbdir = "C:/temp/sales.duckdb"))
+con <- duckdt_connect("C:/temp/sales.duckdb")
+#> v Connected to DuckDB: C:/temp/sales.duckdb
+#> i 1 table: "sales"
+#> > `duckdt_erd(con)` to explore the tables and how they connect
+#> > `duckdt(con, "sales")` to query one with data.table syntax
 
 duckdt_tables(con)
 #>    schema   name       type
 #> 1:   main  sales BASE TABLE
 ```
+
+For a file with more than a couple of tables in it, `duckdt_erd(con)` opens a
+diagram of all of them (and of how they connect) in your browser, and writes
+the query for whichever tables and columns you tick -- see
+[Exploring a database](README.md#exploring-a-database).
 
 ## 3. Wrap the table and query it
 
@@ -101,11 +111,12 @@ d[, amount_incl_tax := amount * 1.1]   # now allowed, persisted to the file
 ## 5. Disconnect when done
 
 ```r
-DBI::dbDisconnect(con, shutdown = TRUE)
+duckdt_disconnect(con)   # or DBI::dbDisconnect(con, shutdown = TRUE)
 ```
 
-`shutdown = TRUE` flushes DuckDB's write-ahead log and closes the file
-cleanly — always pass it when disconnecting from a file-backed database.
+Shutting the database down (which both of these do) flushes DuckDB's
+write-ahead log and closes the file cleanly — always do it when disconnecting
+from a file-backed database.
 
 ## Getting the whole table back into R
 

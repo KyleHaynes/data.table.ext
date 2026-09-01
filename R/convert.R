@@ -35,6 +35,7 @@ as.duckdt <- function(x, conn = NULL, name = NULL, overwrite = FALSE, copy = FAL
   }
   if (is.null(conn)) {
     conn <- DBI::dbConnect(duckdb::duckdb())
+    duckdt_hint_erd()
   }
 
   if (copy) {

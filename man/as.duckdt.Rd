@@ -37,7 +37,7 @@ result independently of \code{x}.
 List-columns (e.g. \code{tags = list(c("a", "b"), "c")}) are supported against
 DuckDB connections, both zero-copy and with \code{copy = TRUE}: they round-trip
 to/from DuckDB's native \code{LIST} type, and come back as an R list-column
-from \code{\link[=as.data.table]{as.data.table()}} with no extra steps. As with DuckDB's \code{LIST} type
+from \code{\link[data.table:as.data.table]{as.data.table()}} with no extra steps. As with DuckDB's \code{LIST} type
 itself, every element within one list-column must coerce to a single
 atomic type. List-columns are not supported against MS SQL Server
 connections.

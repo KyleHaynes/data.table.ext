@@ -22,7 +22,7 @@ A \code{data.table}.
 }
 \description{
 Pushes a \code{LIMIT}/\code{OFFSET} query down to DuckDB and materializes the result
-as a \code{data.table}. Negative \code{n} mirrors \code{\link[utils:head]{utils::head()}}/\code{\link[utils:head]{utils::tail()}}:
+as a \code{data.table}. Negative \code{n} mirrors \code{\link[utils:head]{utils::head()}}/\code{\link[utils:tail]{utils::tail()}}:
 \code{head(x, -2)} returns all but the last 2 rows.
 }
 \details{

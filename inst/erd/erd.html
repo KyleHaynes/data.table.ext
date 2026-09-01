@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<style>
+{{CSS}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">duckdt</span>
+    <span class="subtitle">{{TITLE}}</span>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="topbar-actions">
+    <label class="field">
+      <span>Detail</span>
+      <select id="view-type">
+        <option value="all">All columns</option>
+        <option value="keys_only">Keys only</option>
+        <option value="title_only">Tables only</option>
+      </select>
+    </label>
+    <button id="zoom-out" class="icon-btn" title="Zoom out">&minus;</button>
+    <button id="zoom-reset" class="icon-btn" title="Reset zoom">100%</button>
+    <button id="zoom-in" class="icon-btn" title="Zoom in">+</button>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <input type="search" id="search" placeholder="Filter tables and columns...">
+      <div class="sidebar-buttons">
+        <button data-action="select-all" class="link-btn">Select all</button>
+        <button data-action="select-none" class="link-btn">Clear</button>
+        <button data-action="expand-all" class="link-btn">Expand</button>
+        <button data-action="collapse-all" class="link-btn">Collapse</button>
+      </div>
+      <label class="checkline"><input type="checkbox" id="only-selected"> Show selected tables only</label>
+    </div>
+    <div class="table-list" id="table-list"></div>
+  </aside>
+
+  <section class="content">
+    <div class="diagram-pane">
+      <div class="diagram-scroll" id="diagram-scroll">
+        <div class="diagram" id="diagram"></div>
+      </div>
+      <p class="empty-hint" id="empty-hint">Tick a table on the left to draw it.</p>
+    </div>
+    <div class="code-pane">
+      <div class="tabs" id="code-tabs">
+        <button class="tab active" data-tab="r">R</button>
+        <button class="tab" data-tab="sql">SQL</button>
+        <button class="tab" data-tab="mermaid">Mermaid</button>
+        <span class="tab-spacer"></span>
+        <span class="copy-status" id="copy-status"></span>
+        <button class="copy-btn" id="copy-btn">Copy</button>
+      </div>
+      <pre class="code" id="code"></pre>
+    </div>
+  </section>
+</main>
+
+<script src="{{MERMAID_SRC}}"></script>
+<script id="duckdt-model" type="application/json">{{MODEL}}</script>
+<script>
+{{JS}}
+</script>
+</body>
+</html>

@@ -4,6 +4,10 @@ Query [DuckDB](https://duckdb.org/) using [data.table](https://r-datatable.com/)
 `d[i, j, by]` syntax. Expressions are translated to SQL and run inside DuckDB — data
 only comes back to R as a `data.table` once you materialize a result.
 
+It also draws the database: `duckdt_erd(con)` opens an ER diagram of every
+table and how they connect, and builds the query for the tables and columns
+you tick. See [Exploring a database](#exploring-a-database).
+
 Saving a `data.table` to a persistent DuckDB file and reconnecting to it
 later? See [WORKFLOW.md](WORKFLOW.md) for a step-by-step walkthrough.
 
@@ -57,8 +61,18 @@ persist to (or read from) a database file, open the connection yourself with
 `duckdb::duckdb(dbdir = ...)` and pass it in:
 
 ```r
-con <- DBI::dbConnect(duckdb::duckdb(dbdir = "C:/temp/gnafx.duckdb"))
+con <- duckdt_connect("C:/temp/gnafx.duckdb")
+#> v Connected to DuckDB: C:/temp/gnafx.duckdb
+#> i 2 tables: "addresses", "gnaf"
+#> > `duckdt_erd(con)` to explore the tables and how they connect
+#> > `duckdt(con, "addresses")` to query one with data.table syntax
 ```
+
+`duckdt_connect()` is a thin wrapper around
+`DBI::dbConnect(duckdb::duckdb(dbdir = ...))` that summarises what you just
+opened; pass `read_only = TRUE` for a database you only mean to look at, and
+`quiet = TRUE` to skip the summary. Plain `DBI::dbConnect()` works everywhere
+in duckdt too.
 
 Forward slashes (`"C:/temp/gnafx.duckdb"`) work fine on Windows and avoid
 having to escape backslashes.
@@ -79,7 +93,7 @@ d[, .N, by = state]
 When you're done, close the connection:
 
 ```r
-DBI::dbDisconnect(con, shutdown = TRUE)
+duckdt_disconnect(con)   # or DBI::dbDisconnect(con, shutdown = TRUE)
 ```
 
 ## Writing data
@@ -241,17 +255,93 @@ column-naming conventions, and `duckdt_relationships()` returns a zero-row
 `data.table` (rather than erroring) if the connected database/version
 doesn't expose the constraint views.
 
-`duckdt_erd()` builds on these three to render a Mermaid ER diagram and open
-it as a self-contained HTML page in your browser:
+### Visualising the schema
+
+`duckdt_erd()` builds on those three to write a self-contained HTML page and
+open it in your browser — an ER diagram plus a searchable list of every table
+and column:
 
 ```r
-duckdt_erd(con)                            # opens a Mermaid ER diagram in the browser
+duckdt_erd(con)                            # opens the explorer in your browser
 duckdt_erd(con, include_row_counts = TRUE) # add a COUNT(*) per table (can be slow)
+duckdt_erd(con, tables = c("orders", "customers"), view = "keys_only")
 ```
 
-The returned path also carries the raw Mermaid diagram source as its
-`"mermaid"` attribute, so it can be dropped straight into an Rmd/Quarto
-```` ```mermaid ```` code chunk instead.
+The page is where the "which columns do I actually want" work happens: tick
+tables and columns in the sidebar and it redraws the diagram and writes the
+code that selects exactly those — `duckdt(con, "orders")[, .(id, total)]` for
+a single table, or a `SELECT` with the joins worked out from the schema's
+foreign keys for several — with a copy button. It needs no R packages beyond
+duckdt; the diagram itself is drawn by Mermaid from a CDN, so with no internet
+you get its source instead and everything else still works.
+
+The returned path carries the Mermaid source as its `"mermaid"` attribute (drop
+it straight into an Rmd/Quarto ```` ```mermaid ```` chunk) and the data model
+as `"data_model"`.
+
+`duckdt_explorer(con)` is the Shiny version of the same thing, and — since it
+has a live connection — also previews the rows the query returns. It needs
+`shiny`, and uses `DiagrammeR` and `DT` if they're installed.
+
+### The data model underneath
+
+Both of those draw a **data model**: a description of tables, columns, keys and
+references, ported from [datamodelr](https://github.com/bergant/datamodelr).
+You can build one yourself, edit it, and render it:
+
+```r
+dm <- duckdt_data_model(con)     # or a "duckdt" handle, or a named list of data.frames
+dm
+#> <duckdt data model> 4 tables, 12 columns, 3 references
+#>   customers                      3 cols, PK: customer_id
+#>   orders                         3 cols, PK: order_id, 1 FK
+#>   ...
+
+dm$tables       # table, schema, name, type, n_rows, segment, display
+dm$columns      # table, column, type, key, ref, ref_col
+dm$references   # table, column -> ref, ref_col
+```
+
+Most DuckDB databases — anything built by loading CSV or Parquet files —
+declare no foreign keys at all, which leaves the diagram as a set of
+disconnected boxes. Two ways to fix that:
+
+```r
+# 1. Guess from column naming conventions (customer_id -> customers.customer_id).
+#    Conservative: skips ambiguous names, bare `id`, and type mismatches.
+dm <- duckdt_dm_infer_references(dm)
+duckdt_erd(con, infer_references = TRUE)   # or straight from the connection
+
+# 2. State them exactly.
+dm <- duckdt_dm_set_key(dm, "customers", "customer_id")
+dm <- duckdt_dm_add_references(dm, orders$customer_id == customers$customer_id)
+```
+
+Then zoom in, group and colour tables, and draw it:
+
+```r
+duckdt_dm_filter(dm, "orders", depth = 1)          # orders + whatever it touches
+duckdt_dm_set_segment(dm, list(sales = c("orders", "order_lines")))
+duckdt_dm_set_display(dm, list(accent1 = "customers", hide = "audit_log"))
+
+duckdt_erd(dm)                                      # the interactive page
+duckdt_dm_mermaid(dm, view = "keys_only")           # Mermaid source
+duckdt_dm_dot(dm, rankdir = "LR")                   # Graphviz DOT (prints via DiagrammeR)
+duckdt_dm_render(dm)                                # htmlwidget, for Rmd/Shiny
+duckdt_dm_export(dm, "schema.png")                  # image file
+```
+
+And build the query for a set of tables without the browser at all —
+`duckdt_dm_query()` works out the joins from the model's references:
+
+```r
+duckdt_dm_query(dm, c("orders", "customers"),
+                columns = list(orders = "total", customers = "name"),
+                where = "total > 100")
+```
+
+Tables it can't reach by any reference are listed in the result's `"unjoined"`
+attribute rather than silently cross-joined.
 
 ## Not yet supported
 
@@ -269,3 +359,11 @@ v1 is deliberately **eager**: every `[` issues one query and returns a `data.tab
 This keeps the mental model identical to plain data.table. A lazy mode (building up a
 query across multiple `[` calls before touching R, à la `dtplyr::lazy_dt()`) is a
 natural next step if it turns out to matter for your workloads.
+
+## Credits
+
+The data model and diagram code (`duckdt_data_model()`, the `duckdt_dm_*()`
+functions and the Graphviz rendering) is a port of Darko Bergant's
+[datamodelr](https://github.com/bergant/datamodelr), MIT licensed, extended
+here to reverse-engineer live DuckDB/SQL Server connections, guess undeclared
+references, and drive the interactive column picker and query builder.

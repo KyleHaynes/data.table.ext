@@ -29,7 +29,10 @@ duckdt_parquet <- function(path, conn = NULL, name = NULL, ...) {
 }
 
 duckdt_from_reader <- function(path, conn, name, reader) {
-  if (is.null(conn)) conn <- DBI::dbConnect(duckdb::duckdb())
+  if (is.null(conn)) {
+    conn <- DBI::dbConnect(duckdb::duckdb())
+    duckdt_hint_erd()
+  }
   if (is.null(name)) name <- make.names(tools::file_path_sans_ext(basename(path[1])))
   qpaths <- paste(
     vapply(path, function(p) as.character(DBI::dbQuoteString(conn, p)), character(1)),

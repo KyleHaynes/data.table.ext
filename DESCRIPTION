@@ -1,19 +1,34 @@
 Package: duckdt
 Title: Query DuckDB Using data.table Syntax
 Version: 0.0.0.9000
-Authors@R: person("Kyle", "Haynes", email = "kyle@kylehaynes.com.au", role = c("aut", "cre"))
+Authors@R: c(
+    person("Kyle", "Haynes", email = "kyle@kylehaynes.com.au", role = c("aut", "cre")),
+    person("Darko", "Bergant", role = c("ctb", "cph"),
+           comment = "author of datamodelr (MIT), which the data model and diagram code is ported from"))
 Description: Provides a data.table-style '[i, j, by]' interface backed by DuckDB.
     Expressions are translated to SQL and executed inside DuckDB, so data never
     needs to be pulled into R until the result is materialized as a data.table.
+    Also reverse-engineers a database into a data model -- tables, columns,
+    keys and references -- and draws it as an interactive entity-relationship
+    diagram that builds the query for the tables and columns you pick.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.2
 Imports:
+    cli,
     DBI,
     duckdb,
     data.table,
+    methods,
+    stats,
+    tools,
     utils
 Suggests:
+    DiagrammeR,
+    DiagrammeRsvg,
+    DT,
+    rsvg,
+    shiny,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
+Config/roxygen2/version: 8.1.0

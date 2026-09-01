@@ -1,136 +1,133 @@
-#' Visualize a database's tables and foreign-key relationships
+#' Explore a database's tables and relationships in your browser
 #'
-#' Builds on [duckdt_tables()], [duckdt_schema()], and [duckdt_relationships()]
-#' to render a Mermaid `erDiagram` and open it as a self-contained HTML page
-#' in the system browser. Useful for quickly seeing what tables are
-#' available in a database and how they connect, without writing any SQL
-#' yourself. Works against both DuckDB and MS SQL Server connections.
+#' Builds a data model ([duckdt_data_model()]) and writes it to a
+#' self-contained HTML page: an ER diagram of the tables you tick, a
+#' searchable list of every table and column, and -- as you tick columns --
+#' the `duckdt`/SQL code that selects exactly those, ready to copy. Useful
+#' for finding your way around a database you didn't build, without writing
+#' any SQL first. Works against both DuckDB and MS SQL Server connections,
+#' and needs no packages beyond duckdt itself.
 #'
-#' Foreign keys are only detected when the database actually declares them as
-#' constraints — this does not guess relationships from column-naming
-#' conventions.
+#' Only foreign keys the database actually declares as constraints are drawn.
+#' DuckDB files built by loading CSV/Parquet usually declare none, in which
+#' case pass `infer_references = TRUE` to guess them from column names (see
+#' [duckdt_dm_infer_references()] for exactly what that guesses), or state
+#' them yourself with [duckdt_dm_add_references()] and pass the resulting
+#' model straight to this function.
 #'
-#' @param conn A `DBI` connection, or a `"duckdt"` object (its `$conn` is
-#'   used).
-#' @param include_row_counts Include a `SELECT count(*)` per table in the
-#'   diagram. Default `FALSE`, since this can be slow on a large or remote
-#'   database; a failure on any single table is skipped rather than failing
-#'   the whole call.
-#' @param open Open the generated HTML file with [utils::browseURL()].
-#'   Default `TRUE`.
+#' The page renders its diagram with [Mermaid](https://mermaid.js.org/)
+#' loaded from a CDN. With no internet connection everything still works --
+#' the table/column browser, the generated code -- except the drawing itself,
+#' which is replaced by its source.
 #'
-#' @return Invisibly, the path to the generated HTML file. The Mermaid
-#'   diagram source is attached as the `"mermaid"` attribute, so it can be
-#'   dropped directly into an Rmd/Quarto ```` ```mermaid ```` code chunk.
+#' @param x A `DBI` connection, a `"duckdt"` object, or a
+#'   `"duckdt_data_model"` (from [duckdt_data_model()], so you can filter or
+#'   annotate it first).
+#' @param tables Optionally, a character vector of tables to model. Others
+#'   are left out entirely.
+#' @param include_row_counts Run a `SELECT count(*)` per table and show it
+#'   next to each table. Default `FALSE`, since this can be slow on a large
+#'   or remote database; a failure on any single table shows as no count
+#'   rather than failing the whole call.
+#' @param open Open the generated page with [utils::browseURL()]. Default
+#'   `TRUE`.
+#' @param infer_references Guess undeclared foreign keys from column naming
+#'   conventions, via [duckdt_dm_infer_references()]. Default `FALSE`.
+#' @param select Tables to start with ticked. Defaults to all of them when
+#'   there are 12 or fewer, otherwise none.
+#' @param view Initial level of detail: `"all"` columns, `"keys_only"` or
+#'   `"title_only"`.
+#' @param title Page title. Defaults to a description of the connection.
+#' @param file Where to write the page. Defaults to a temporary file.
+#'
+#' @return Invisibly, the path to the generated HTML file, with the Mermaid
+#'   diagram source attached as its `"mermaid"` attribute (so it can be
+#'   dropped straight into an Rmd/Quarto ```` ```mermaid ```` chunk) and the
+#'   data model as its `"data_model"` attribute.
+#' @seealso [duckdt_explorer()] for the Shiny version, which also previews
+#'   and runs the query; [duckdt_dm_mermaid()] and [duckdt_dm_dot()] for the
+#'   diagram sources on their own.
+#' @examples
+#' con <- duckdt_connect(quiet = TRUE)
+#' DBI::dbExecute(con, "CREATE TABLE customers (id INTEGER PRIMARY KEY, name VARCHAR)")
+#' DBI::dbExecute(con, "CREATE TABLE orders (
+#'   id INTEGER PRIMARY KEY, customer_id INTEGER REFERENCES customers(id), total DOUBLE)")
+#'
+#' path <- duckdt_erd(con, open = FALSE)
+#' cat(attr(path, "mermaid"))
+#' DBI::dbDisconnect(con, shutdown = TRUE)
 #' @export
-duckdt_erd <- function(conn, include_row_counts = FALSE, open = TRUE) {
-  conn <- duckdt_unwrap_conn(conn)
-
-  tables <- duckdt_tables(conn)
-  if (nrow(tables) == 0) {
-    stop("duckdt: no tables/views found on this connection.", call. = FALSE)
+duckdt_erd <- function(x, tables = NULL, include_row_counts = FALSE, open = TRUE,
+                       infer_references = FALSE, select = NULL,
+                       view = c("all", "keys_only", "title_only"),
+                       title = NULL, file = NULL) {
+  view <- match.arg(view)
+  dm <- if (is_duckdt_data_model(x)) {
+    x
+  } else {
+    duckdt_data_model(
+      x, tables = tables, infer_references = infer_references,
+      row_counts = include_row_counts
+    )
   }
-  cols <- duckdt_schema(conn)
-  fks <- duckdt_relationships(conn)
+  if (is.null(title)) title <- duckdt_conn_label(x)
+  if (is.null(file)) file <- tempfile(pattern = "duckdt-erd-", fileext = ".html")
 
-  entity_id <- function(schema, table) gsub("[^A-Za-z0-9_]", "_", paste0(schema, "_", table))
-  tables$entity <- entity_id(tables$schema, tables$name)
-  tables$full_name <- paste0(tables$schema, ".", tables$name)
+  mermaid <- duckdt_dm_mermaid(dm, view = view)
 
-  row_counts <- NULL
-  if (isTRUE(include_row_counts)) {
-    row_counts <- stats::setNames(rep(NA_real_, nrow(tables)), tables$full_name)
-    for (i in seq_len(nrow(tables))) {
-      qname <- paste0(
-        DBI::dbQuoteIdentifier(conn, tables$schema[i]), ".",
-        DBI::dbQuoteIdentifier(conn, tables$name[i])
-      )
-      n <- tryCatch(
-        DBI::dbGetQuery(conn, paste0("SELECT count(*) AS n FROM ", qname))$n[1],
-        error = function(e) NA_real_
-      )
-      row_counts[tables$full_name[i]] <- n
-    }
-  }
+  tabs <- as.data.frame(dm$tables)
+  tabs$entity <- unname(duckdt_dm_entities(dm)[tabs$table])
+  model_json <- duckdt_to_json(list(
+    tables = tabs[, c("table", "schema", "name", "type", "n_rows", "segment",
+                      "display", "entity")],
+    columns = as.data.frame(dm$columns),
+    references = as.data.frame(dm$references),
+    selected = if (is.null(select)) list() else as.list(select),
+    dbdir = duckdt_dbdir(x),
+    title = title
+  ))
 
-  clean_type <- function(type) gsub("[^A-Za-z0-9_]+", "_", type)
-
-  lines <- c("erDiagram")
-  for (i in seq_len(nrow(tables))) {
-    sch <- tables$schema[i]
-    tbl <- tables$name[i]
-    ent <- tables$entity[i]
-    cols_i <- cols[cols$schema == sch & cols$table == tbl, , drop = FALSE]
-
-    lines <- c(lines, sprintf("    %s {", ent))
-    if (nrow(cols_i) > 0) {
-      for (j in seq_len(nrow(cols_i))) {
-        key_tag <- if (isTRUE(cols_i$primary_key[j])) " PK" else ""
-        lines <- c(lines, sprintf(
-          "        %s %s%s",
-          clean_type(cols_i$type[j]), cols_i$column[j], key_tag
-        ))
-      }
-    }
-    lines <- c(lines, "    }")
-  }
-
-  if (nrow(fks) > 0) {
-    fks$fk_entity <- entity_id(fks$fk_schema, fks$fk_table)
-    fks$pk_entity <- entity_id(fks$pk_schema, fks$pk_table)
-    known <- fks$fk_entity %in% tables$entity & fks$pk_entity %in% tables$entity
-    fks <- fks[known, , drop = FALSE]
-    for (i in seq_len(nrow(fks))) {
-      lines <- c(lines, sprintf(
-        '    %s ||--o{ %s : "%s"',
-        fks$pk_entity[i], fks$fk_entity[i], fks$fk_column[i]
-      ))
-    }
-  }
-
-  mermaid <- paste(lines, collapse = "\n")
-
-  summary_rows <- sprintf(
-    "<tr><td>%s</td><td>%s</td>%s</tr>",
-    tables$full_name, tables$type,
-    if (is.null(row_counts)) "" else {
-      paste0("<td>", ifelse(is.na(row_counts[tables$full_name]), "-",
-        format(row_counts[tables$full_name], big.mark = ",")), "</td>")
-    }
+  html <- duckdt_fill_template(
+    duckdt_asset("erd", "erd.html"),
+    TITLE = duckdt_html_escape(title),
+    CSS = duckdt_asset_text("erd", "erd.css"),
+    JS = duckdt_asset_text("erd", "erd.js"),
+    MODEL = model_json,
+    MERMAID_SRC = getOption("duckdt.mermaid_src", duckdt_mermaid_cdn)
   )
+  writeLines(html, file, useBytes = TRUE)
 
-  html <- sprintf('<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>duckdt: database schema</title>
-<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
-<style>
-  body { font-family: sans-serif; margin: 2rem; }
-  table { border-collapse: collapse; margin-bottom: 2rem; }
-  td, th { border: 1px solid #ccc; padding: 4px 10px; text-align: left; }
-  .mermaid { overflow-x: auto; }
-</style>
-</head>
-<body>
-<h1>Database schema</h1>
-<table>
-<tr><th>Table</th><th>Type</th>%s</tr>
-%s
-</table>
-<pre class="mermaid">
-%s
-</pre>
-<script>mermaid.initialize({ startOnLoad: true });</script>
-</body>
-</html>
-', if (is.null(row_counts)) "" else "<th>Rows</th>",
-    paste(summary_rows, collapse = "\n"), mermaid)
+  if (isTRUE(open)) utils::browseURL(file)
 
-  path <- tempfile(fileext = ".html")
-  writeLines(html, path)
-  if (isTRUE(open)) utils::browseURL(path)
+  attr(file, "mermaid") <- mermaid
+  attr(file, "data_model") <- dm
+  invisible(file)
+}
 
-  attr(path, "mermaid") <- mermaid
-  invisible(path)
+duckdt_mermaid_cdn <- "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"
+
+# ---- template plumbing -----------------------------------------------------
+
+duckdt_asset <- function(...) {
+  path <- system.file(..., package = "duckdt")
+  if (!nzchar(path)) {
+    stop("duckdt: could not find the packaged file ", file.path(...),
+      ". Is the package installed correctly?", call. = FALSE)
+  }
+  path
+}
+
+duckdt_asset_text <- function(...) {
+  paste(readLines(duckdt_asset(...), warn = FALSE, encoding = "UTF-8"), collapse = "\n")
+}
+
+# Replace {{NAME}} placeholders. Values are inserted literally (they are
+# already-escaped HTML, CSS, JS or JSON), so `fixed = TRUE` on both sides.
+duckdt_fill_template <- function(path, ...) {
+  values <- list(...)
+  out <- paste(readLines(path, warn = FALSE, encoding = "UTF-8"), collapse = "\n")
+  for (nm in names(values)) {
+    out <- gsub(paste0("{{", nm, "}}"), values[[nm]], out, fixed = TRUE)
+  }
+  out
 }
