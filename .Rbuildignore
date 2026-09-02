@@ -4,3 +4,4 @@
 ^\.github$
 ^\.claude$
 ^benchmarks$
+^inst/slides/.*\.html$

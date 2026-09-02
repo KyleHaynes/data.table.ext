@@ -35,12 +35,15 @@ duckdt <- function(conn, table, materialized = NA, writable = FALSE) {
   structure(list(conn = conn, tbl = table, materialized = materialized, writable = isTRUE(writable)), class = "duckdt")
 }
 
+# A DuckDB TEMP table reports "LOCAL TEMPORARY" rather than "BASE TABLE",
+# but it is just as materialized and just as writable -- so handles over one
+# (e.g. from duckdt_temp()) must not be mistaken for read-only views.
 duckdt_is_table <- function(conn, table) {
   res <- DBI::dbGetQuery(conn, paste0(
     "SELECT table_type FROM information_schema.tables WHERE table_name = ",
     DBI::dbQuoteString(conn, table)
   ))
-  nrow(res) > 0 && identical(res$table_type[1], "BASE TABLE")
+  nrow(res) > 0 && res$table_type[1] %in% c("BASE TABLE", "LOCAL TEMPORARY")
 }
 
 duckdt_columns <- function(x) DBI::dbListFields(x$conn, x$tbl)
@@ -53,6 +56,8 @@ print.duckdt <- function(x, n = 6L, ...) {
   nr <- DBI::dbGetQuery(x$conn, paste0("SELECT count(*) AS n FROM ", duckdt_qtbl(x)))$n
   status <- if (!isTRUE(x$materialized)) {
     " (view)"
+  } else if (isTRUE(x$temporary)) {
+    " (temp)"
   } else if (!isTRUE(x$writable)) {
     " (read-only)"
   } else {

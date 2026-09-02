@@ -146,6 +146,66 @@ column shared between `x` and `y` (a natural join, like base `merge()`) -- pass 
 explicitly whenever `y` carries value columns that should be updated rather than
 matched on.
 
+Note that `duckdt_merge()` **writes**: it reconciles `y` into `x`'s table in
+place. To combine two tables into a new result without touching either, see
+[Joining tables](#joining-tables).
+
+## Joining tables
+
+`duckdt_join()` is the read-path counterpart to `duckdt_merge()`: it joins two
+tables in SQL and returns the result, leaving both inputs untouched, the way
+base `merge()` does. Either side may be a `"duckdt"` handle or an ordinary
+`data.frame`/`data.table` — R-side inputs are staged into a temporary table on
+the connection first, so the join itself always runs in the engine:
+
+```r
+d <- duckdt(con, "gnaf_addresses")
+f <- duckdt(con, "gnaf_locality_index")
+
+duckdt_join(d, f, by = "locality_name")                 # two database tables
+duckdt_join(d, my_data_table, by = "locality_name")     # database table + R table
+duckdt_join(my_data_table, f, by = "locality_name")     # ...either way round
+
+merge(d, f, by = "locality_name")                       # same thing, base spelling
+```
+
+`by`/`by.x`/`by.y`, `all`/`all.x`/`all.y`, `suffixes` and `sort` all behave as
+in base `merge()`: no `all*` is an `INNER JOIN`, `all.x` a `LEFT JOIN`, `all.y`
+a `RIGHT JOIN`, `all` a `FULL OUTER JOIN`. At least one side must be a
+`"duckdt"` object — that's what says which database to run in — and if both
+are, they must share a connection.
+
+### Keeping a subset in the database
+
+`d[i, j, by]` returns a `data.table`, so the rows have *left* the database and
+can't be used where a handle is expected:
+
+```r
+duckdt_join(d[locality_name == "WORONGARY"], f, by = "locality_name")
+# `d[...]` is already a data.table here — it works, but the subset made a
+# round trip through R first.
+```
+
+`duckdt_temp()` runs the same `i`/`j`/`by` query into a temporary table and
+hands back a `"duckdt"` handle, so nothing crosses into R:
+
+```r
+sub <- duckdt_temp(d, locality_name == "WORONGARY")
+sub
+#> <duckdt> duckdt_temp_gnaf_addresses_1 [2 x 3] (temp)
+
+duckdt_join(sub, f, by = "locality_name")   # join runs entirely in DuckDB
+duckdt_drop(sub)                            # done with it
+```
+
+The handle is materialized and writable, so `:=` and `duckdt_merge()` work
+against it too — writes land on the temporary copy and leave the source table
+alone. On DuckDB the table lives in the session's `temp` schema and disappears
+when the connection closes; on MS SQL Server it's created with
+`SELECT ... INTO` as an ordinary table, so call `duckdt_drop()` when you're
+finished. As a guard, `duckdt_drop()` refuses handles `duckdt_temp()` didn't
+create unless you pass `force = TRUE`.
+
 ## Getting data out
 
 ```r
@@ -231,6 +291,12 @@ drop+recreate path already carries.
 `MERGE` statement, that path is actually simpler than DuckDB's: the staged
 subset and a single `MERGE INTO ... USING ... ON (...) WHEN MATCHED ...`
 statement, rather than DuckDB's separate `UPDATE`/`INSERT`/`DELETE`.
+
+`duckdt_join()` works against SQL Server too — `INNER`/`LEFT`/`RIGHT`/`FULL
+OUTER JOIN` are standard SQL. `duckdt_temp()` does differ: T-SQL has no
+`CREATE TEMP TABLE ... AS`, so it uses `SELECT ... INTO`, which creates an
+ordinary table on the current schema rather than a session-scoped one — drop
+it with `duckdt_drop()` when you're done.
 
 ## Exploring a database
 
@@ -346,6 +412,9 @@ attribute rather than silently cross-joined.
 ## Not yet supported
 
 - Lazy/chained query building — every `[` runs immediately (by design, see below).
+  `duckdt_temp()` is the escape hatch: it runs an `[i, j, by]` query into a temporary
+  table and returns a handle, so a subset can stay in the database and be chained into
+  another query.
 - Row-position indexing in `i` (e.g. `d[1:5]`) — DuckDB tables are unordered, so this
   isn't meaningful without an explicit sort; filter on a column instead.
 - Grouped `:=` (`by=` together with a write).
@@ -358,7 +427,27 @@ attribute rather than silently cross-joined.
 v1 is deliberately **eager**: every `[` issues one query and returns a `data.table`.
 This keeps the mental model identical to plain data.table. A lazy mode (building up a
 query across multiple `[` calls before touching R, à la `dtplyr::lazy_dt()`) is a
-natural next step if it turns out to matter for your workloads.
+natural next step if it turns out to matter for your workloads. In the meantime
+`duckdt_temp()` covers the case that actually bites — a subset you want to feed to
+another database-side operation — by materializing it into a temporary table rather
+than into R.
+
+## Slides
+
+`inst/slides/duckdt-intro.qmd` is a Quarto **revealjs** deck introducing the
+package to a team that doesn't already know it: what it is, the connect →
+look → wrap → query → get-out steps, Mermaid diagrams of how the pieces fit,
+and live output run against a small made-up address database
+(`inst/slides/demo-db.R`).
+
+```sh
+cd inst/slides
+quarto render duckdt-intro.qmd     # -> duckdt-intro.html, one self-contained file
+```
+
+The rendered deck is a single HTML file with everything inlined, so it works
+offline and can be emailed as-is. `make-screenshots.R` beside it regenerates
+the explorer screenshot the deck uses.
 
 ## Credits
 

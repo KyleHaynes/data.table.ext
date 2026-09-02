@@ -70,8 +70,13 @@ duckdt_rebuild_table_duckdb <- function(x, col_exists, new_val, qcol) {
   } else {
     paste0("*, ", new_val, " AS ", qcol)
   }
+  # A TEMP table has to be recreated as TEMP: an unqualified CREATE TABLE
+  # lands in `main`, where it would be shadowed by the temp table of the same
+  # name that every later query still resolves to -- so the `:=` would look
+  # like it silently did nothing.
+  create <- if (isTRUE(x$temporary)) "CREATE OR REPLACE TEMP TABLE " else "CREATE OR REPLACE TABLE "
   sql <- paste0(
-    "CREATE OR REPLACE TABLE ", duckdt_qtbl(x), " AS SELECT ", select_cols,
+    create, duckdt_qtbl(x), " AS SELECT ", select_cols,
     " FROM ", duckdt_qtbl(x)
   )
   DBI::dbExecute(x$conn, sql)

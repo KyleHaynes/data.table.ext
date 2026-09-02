@@ -42,7 +42,13 @@
 #' @export
 duckdt_merge <- function(x, y, by = NULL, update = TRUE, insert = TRUE, delete = FALSE) {
   if (!inherits(x, "duckdt")) {
-    stop("duckdt_merge: `x` must be a duckdt object.", call. = FALSE)
+    stop(
+      "duckdt_merge: `x` must be a duckdt object -- it names the table to write into, ",
+      "so it can't be a data.frame or a `[` result (which has already left the database). ",
+      "To join two tables and get the result back, use `duckdt_join()`; to keep a `[` ",
+      "subset in the database as a handle, use `duckdt_temp()`.",
+      call. = FALSE
+    )
   }
   if (!isTRUE(x$materialized)) {
     stop(

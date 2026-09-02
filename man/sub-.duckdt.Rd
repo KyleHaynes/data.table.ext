@@ -30,3 +30,10 @@ underlying DuckDB table is mutated instead (see the write-path notes in
 the package README); this requires a materialized, writable table (see
 \code{\link[=as.duckdt]{as.duckdt()}}'s \code{copy} argument and \code{\link[=duckdt]{duckdt()}}'s \code{writable} argument).
 }
+\details{
+Because this returns a \code{data.table}, the result has left the database --
+it can no longer be used where a \code{"duckdt"} handle is expected (e.g. as an
+argument to \code{\link[=duckdt_join]{duckdt_join()}} or \code{\link[=duckdt_merge]{duckdt_merge()}}). Use \code{\link[=duckdt_temp]{duckdt_temp()}} to
+run the same \code{i}/\code{j}/\code{by} query into a temporary table and get a handle
+back instead, keeping the rows in DuckDB.
+}

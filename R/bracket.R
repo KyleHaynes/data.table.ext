@@ -7,6 +7,12 @@
 #' the package README); this requires a materialized, writable table (see
 #' [as.duckdt()]'s `copy` argument and [duckdt()]'s `writable` argument).
 #'
+#' Because this returns a `data.table`, the result has left the database --
+#' it can no longer be used where a `"duckdt"` handle is expected (e.g. as an
+#' argument to [duckdt_join()] or [duckdt_merge()]). Use [duckdt_temp()] to
+#' run the same `i`/`j`/`by` query into a temporary table and get a handle
+#' back instead, keeping the rows in DuckDB.
+#'
 #' @param x A `"duckdt"` object.
 #' @param i Optional row filter, e.g. `cyl == 6`.
 #' @param j Optional column selection/computation via `.(...)`/`list(...)`,
@@ -27,13 +33,29 @@
   bye <- if (has_by) substitute(by)
 
   env <- parent.frame()
+
+  if (has_j && is.call(je) && identical(je[[1]], as.name(":="))) {
+    return(duckdt_mutate(x, ie, je, has_i, has_by, duckdt_columns(x), env))
+  }
+
+  sql <- duckdt_select_sql(x, ie, je, bye, has_i, has_j, has_by, env)
+
+  # `[]` after setDT() works around a well-known data.table quirk: setDT()
+  # marks the object so its *next* auto-print at the top level is silently
+  # skipped (the same mechanism `:=` uses). `[]` forces a normal print-able
+  # copy so `d[cyl == 6]` at the console (or in a function returning this
+  # value) actually prints instead of appearing to do nothing.
+  data.table::setDT(DBI::dbGetQuery(x$conn, sql))[]
+}
+
+# Internal: render an `i`/`j`/`by` query as a SELECT statement, without
+# running it. Shared by `[.duckdt` (which executes it into a data.table) and
+# duckdt_temp() (which executes it into a temporary table), so both spell the
+# same data.table syntax the same way.
+duckdt_select_sql <- function(x, ie, je, bye, has_i, has_j, has_by, env) {
   conn <- x$conn
   cols <- duckdt_columns(x)
   dialect <- duckdt_dialect(conn)
-
-  if (has_j && is.call(je) && identical(je[[1]], as.name(":="))) {
-    return(duckdt_mutate(x, ie, je, has_i, has_by, cols, env))
-  }
 
   where_sql <- if (has_i) translate_expr(ie, cols, env, conn, dialect) else NULL
   by_res <- if (has_by) translate_by(bye, cols, env, conn, dialect) else NULL
@@ -56,11 +78,5 @@
   sql <- paste0("SELECT ", paste(parts, collapse = ", "), " FROM ", duckdt_qtbl(x))
   if (!is.null(where_sql)) sql <- paste0(sql, " WHERE ", where_sql)
   if (!is.null(by_res)) sql <- paste0(sql, " GROUP BY ", paste(by_res$parts, collapse = ", "))
-
-  # `[]` after setDT() works around a well-known data.table quirk: setDT()
-  # marks the object so its *next* auto-print at the top level is silently
-  # skipped (the same mechanism `:=` uses). `[]` forces a normal print-able
-  # copy so `d[cyl == 6]` at the console (or in a function returning this
-  # value) actually prints instead of appearing to do nothing.
-  data.table::setDT(DBI::dbGetQuery(conn, sql))[]
+  sql
 }
