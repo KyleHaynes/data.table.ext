@@ -36,4 +36,12 @@ it can no longer be used where a \code{"duckdt"} handle is expected (e.g. as an
 argument to \code{\link[=duckdt_join]{duckdt_join()}} or \code{\link[=duckdt_merge]{duckdt_merge()}}). Use \code{\link[=duckdt_temp]{duckdt_temp()}} to
 run the same \code{i}/\code{j}/\code{by} query into a temporary table and get a handle
 back instead, keeping the rows in DuckDB.
+
+Binary columns (\code{BLOB}/\code{BIT} on DuckDB, \code{varbinary}/\code{binary}/\code{image} on
+MS SQL Server) are left out when \code{j} is missing: no driver hands them back
+as an R vector, and asking for one fails the whole query rather than just
+that column, so a single binary column would otherwise make the table
+unreadable. Naming one in \code{j} (\code{d[, .(payload)]}) still selects it, and
+nothing that stays in the database -- \verb{:=}, \code{\link[=duckdt_temp]{duckdt_temp()}},
+\code{\link[=duckdt_merge]{duckdt_merge()}} -- is affected.
 }

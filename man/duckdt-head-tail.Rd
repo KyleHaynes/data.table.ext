@@ -30,3 +30,11 @@ Because DuckDB tables are unordered without an explicit \verb{ORDER BY},
 \code{tail()} reflects DuckDB's current scan order rather than a guaranteed
 original row order — see the package README for details.
 }
+\section{Binary columns}{
+
+Binary columns (\code{BLOB}/\code{BIT} on DuckDB, \code{varbinary}/\code{binary}/\code{image} on
+MS SQL Server) are left out of the result: no driver hands them back as an
+R vector, and asking for one fails the whole query rather than just that
+column.
+}
+

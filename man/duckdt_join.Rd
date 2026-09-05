@@ -74,6 +74,15 @@ supplies the connection to run on. If both are, they must be on the same
 connection. Joining two R data.frames is data.table's job, not this
 function's.
 }
+\section{Binary columns}{
+
+Binary columns (\code{BLOB}/\code{BIT} on DuckDB, \code{varbinary}/\code{binary}/\code{image} on
+MS SQL Server) are dropped from the result, since no driver hands them
+back as an R vector. This happens after \code{by} is resolved, so a natural
+join still keys on exactly the columns base \code{\link[=merge]{merge()}} would -- a binary
+column used as a join key is kept.
+}
+
 \examples{
 d <- as.duckdt(datasets::mtcars, name = "cars")
 labels <- data.frame(cyl = c(4, 6, 8), label = c("four", "six", "eight"))

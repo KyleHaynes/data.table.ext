@@ -75,6 +75,11 @@ as.duckdt <- function(x, conn = NULL, name = NULL, overwrite = FALSE, copy = FAL
 #' Runs `SELECT * FROM <table>` and materializes the result in R. This is
 #' the counterpart to [as.duckdt()].
 #'
+#' Binary columns (`BLOB`/`BIT` on DuckDB, `varbinary`/`binary`/`image` on
+#' MS SQL Server) are left out: no driver hands them back as an R vector, and
+#' on both backends asking for one fails the entire query. Select such a
+#' column by name (`x[, .(payload)]`) if you want to try anyway.
+#'
 #' @param x A `"duckdt"` object.
 #' @param ... Unused.
 #' @return A `data.table`.
@@ -83,5 +88,6 @@ as.duckdt <- function(x, conn = NULL, name = NULL, overwrite = FALSE, copy = FAL
 as.data.table.duckdt <- function(x, ...) {
   # `[]` works around a data.table quirk where setDT() suppresses the next
   # top-level auto-print (see the note in bracket.R).
-  data.table::setDT(DBI::dbGetQuery(x$conn, paste0("SELECT * FROM ", duckdt_qtbl(x))))[]
+  sql <- paste0("SELECT ", duckdt_star(x), " FROM ", duckdt_qtbl(x))
+  data.table::setDT(DBI::dbGetQuery(x$conn, sql))[]
 }

@@ -18,3 +18,9 @@ A \code{data.table}.
 Runs \verb{SELECT * FROM <table>} and materializes the result in R. This is
 the counterpart to \code{\link[=as.duckdt]{as.duckdt()}}.
 }
+\details{
+Binary columns (\code{BLOB}/\code{BIT} on DuckDB, \code{varbinary}/\code{binary}/\code{image} on
+MS SQL Server) are left out: no driver hands them back as an R vector, and
+on both backends asking for one fails the entire query. Select such a
+column by name (\code{x[, .(payload)]}) if you want to try anyway.
+}

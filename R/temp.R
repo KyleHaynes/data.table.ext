@@ -51,7 +51,7 @@ duckdt_temp <- function(x, i, j, by, name = NULL) {
     )
   }
 
-  sql <- duckdt_select_sql(x, ie, je, bye, has_i, has_j, has_by, parent.frame())
+  sql <- duckdt_select_sql(x, ie, je, bye, has_i, has_j, has_by, parent.frame(), to_r = FALSE)
   if (is.null(name)) name <- duckdt_temp_name(x$tbl)
   duckdt_create_temp(x$conn, name, sql, duckdt_dialect(x$conn))
   duckdt_temp_handle(x$conn, name)

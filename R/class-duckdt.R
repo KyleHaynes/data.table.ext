@@ -26,7 +26,7 @@
 #' @return An object of class `"duckdt"`.
 #' @export
 duckdt <- function(conn, table, materialized = NA, writable = FALSE) {
-  if (!DBI::dbExistsTable(conn, table)) {
+  if (!duckdt_exists(conn, table)) {
     stop(sprintf("duckdt: table/view '%s' does not exist on this connection.", table), call. = FALSE)
   }
   if (is.na(materialized)) {
@@ -46,7 +46,24 @@ duckdt_is_table <- function(conn, table) {
   nrow(res) > 0 && res$table_type[1] %in% c("BASE TABLE", "LOCAL TEMPORARY")
 }
 
-duckdt_columns <- function(x) DBI::dbListFields(x$conn, x$tbl)
+# DBI's dbExistsTable()/dbListFields() are the direct answers, but DuckDB
+# implements both by probing with `SELECT * FROM t WHERE FALSE` -- which
+# fails at prepare time on a column type it can't convert (BIT), so it
+# reports "no such table" and "can't list columns" for exactly the tables
+# binary-cols.R exists to keep readable. The catalogue knows better.
+duckdt_exists <- function(conn, table) {
+  DBI::dbExistsTable(conn, table) || nrow(duckdt_column_types(conn, table)) > 0
+}
+
+duckdt_columns <- function(x) {
+  cols <- tryCatch(DBI::dbListFields(x$conn, x$tbl), error = function(e) NULL)
+  if (!is.null(cols)) return(cols)
+  types <- duckdt_column_types(x$conn, x$tbl)
+  if (!nrow(types)) {
+    stop(sprintf("duckdt: could not list the columns of '%s'.", x$tbl), call. = FALSE)
+  }
+  types$column
+}
 
 duckdt_qtbl <- function(x) DBI::dbQuoteIdentifier(x$conn, x$tbl)
 
@@ -68,7 +85,23 @@ print.duckdt <- function(x, n = 6L, ...) {
     x$tbl, format(nr, big.mark = ","), length(cols), status
   ))
   cat("Columns:", paste(cols, collapse = ", "), "\n")
-  preview_sql <- duckdt_limit_sql(duckdt_qtbl(x), n, duckdt_dialect(x$conn))
+  # Naming the skipped columns here is the standing answer to "where did my
+  # column go?", so print() reports them every time rather than leaving it to
+  # the once-per-session note -- and claims that note so it isn't repeated.
+  bin <- intersect(cols, duckdt_binary_cols(x))
+  if (length(bin)) {
+    duckdt_binary_notify(x$tbl, bin, announce = FALSE)
+    cat("Not fetched (binary):", paste(bin, collapse = ", "), "\n")
+  }
+  keep <- setdiff(cols, bin)
+  if (!length(keep)) {
+    cat("No column can be fetched into R; reduce them in the database instead.\n")
+    return(invisible(x))
+  }
+  preview_sql <- duckdt_limit_sql(
+    duckdt_qtbl(x), n, duckdt_dialect(x$conn),
+    if (length(bin)) duckdt_select_list(x$conn, keep, x$tbl) else "*"
+  )
   preview <- DBI::dbGetQuery(x$conn, preview_sql)
   print(data.table::setDT(preview))
   invisible(x)

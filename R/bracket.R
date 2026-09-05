@@ -13,6 +13,14 @@
 #' run the same `i`/`j`/`by` query into a temporary table and get a handle
 #' back instead, keeping the rows in DuckDB.
 #'
+#' Binary columns (`BLOB`/`BIT` on DuckDB, `varbinary`/`binary`/`image` on
+#' MS SQL Server) are left out when `j` is missing: no driver hands them back
+#' as an R vector, and asking for one fails the whole query rather than just
+#' that column, so a single binary column would otherwise make the table
+#' unreadable. Naming one in `j` (`d[, .(payload)]`) still selects it, and
+#' nothing that stays in the database -- `:=`, [duckdt_temp()],
+#' [duckdt_merge()] -- is affected.
+#'
 #' @param x A `"duckdt"` object.
 #' @param i Optional row filter, e.g. `cyl == 6`.
 #' @param j Optional column selection/computation via `.(...)`/`list(...)`,
@@ -51,8 +59,11 @@
 # Internal: render an `i`/`j`/`by` query as a SELECT statement, without
 # running it. Shared by `[.duckdt` (which executes it into a data.table) and
 # duckdt_temp() (which executes it into a temporary table), so both spell the
-# same data.table syntax the same way.
-duckdt_select_sql <- function(x, ie, je, bye, has_i, has_j, has_by, env) {
+# same data.table syntax the same way. They differ in one place: `to_r`
+# expands a bare `*` to the columns R can actually receive (see
+# binary-cols.R), which duckdt_temp() -- whose rows never leave the database
+# -- turns off.
+duckdt_select_sql <- function(x, ie, je, bye, has_i, has_j, has_by, env, to_r = TRUE) {
   conn <- x$conn
   cols <- duckdt_columns(x)
   dialect <- duckdt_dialect(conn)
@@ -70,10 +81,8 @@ duckdt_select_sql <- function(x, ie, je, bye, has_i, has_j, has_by, env) {
       j_parts <- j_parts[!dup]
     }
     parts <- c(parts, j_parts)
-  } else if (is.null(by_res)) {
-    parts <- "*"
   }
-  if (length(parts) == 0) parts <- "*"
+  if (length(parts) == 0) parts <- if (to_r) duckdt_star(x, cols) else "*"
 
   sql <- paste0("SELECT ", paste(parts, collapse = ", "), " FROM ", duckdt_qtbl(x))
   if (!is.null(where_sql)) sql <- paste0(sql, " WHERE ", where_sql)

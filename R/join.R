@@ -40,6 +40,12 @@
 #'   and arbitrary.
 #'
 #' @return A `data.table`.
+#' @section Binary columns:
+#' Binary columns (`BLOB`/`BIT` on DuckDB, `varbinary`/`binary`/`image` on
+#' MS SQL Server) are dropped from the result, since no driver hands them
+#' back as an R vector. This happens after `by` is resolved, so a natural
+#' join still keys on exactly the columns base [merge()] would -- a binary
+#' column used as a join key is kept.
 #' @seealso [duckdt_temp()] to keep a filtered subset in the database so it
 #'   can be joined; [duckdt_merge()] for the write-path counterpart.
 #' @examples
@@ -70,7 +76,9 @@ duckdt_join <- function(x, y, by = NULL, by.x = NULL, by.y = NULL,
   on.exit(duckdt_join_unstage(conn, y_ref, dialect), add = TRUE)
 
   sql <- duckdt_join_sql(
-    conn, x_ref$sql, y_ref$sql, x_cols, y_cols, keys,
+    conn, x_ref$sql, y_ref$sql,
+    duckdt_join_project(x, x_cols, keys$x), duckdt_join_project(y, y_cols, keys$y),
+    keys,
     all.x = isTRUE(all.x), all.y = isTRUE(all.y),
     suffixes = suffixes, sort = isTRUE(sort)
   )
@@ -111,6 +119,20 @@ duckdt_join_conn <- function(x, y) {
 }
 
 duckdt_side_columns <- function(v) if (inherits(v, "duckdt")) duckdt_columns(v) else names(v)
+
+# The columns of one side worth putting in the result: everything but the
+# binary ones, which can't be handed back to R (see binary-cols.R). Only the
+# projection is narrowed -- `keys` is already resolved by the time this runs,
+# so dropping a column here can never change which rows the join matches, and
+# a key that happens to be binary is kept rather than silently removed from
+# the output it names.
+duckdt_join_project <- function(v, cols, keys) {
+  if (!inherits(v, "duckdt")) return(cols)
+  bin <- setdiff(duckdt_binary_cols(v), keys)
+  if (!length(bin)) return(cols)
+  duckdt_binary_notify(v$tbl, intersect(cols, bin))
+  setdiff(cols, bin)
+}
 
 # Give the join something to put in its FROM clause. A duckdt side is
 # already a table name; an R side is copied into a temporary table (reusing
