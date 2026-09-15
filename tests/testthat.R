@@ -8,5 +8,6 @@
 
 library(testthat)
 library(data.table.ext)
+suppressPackageStartupMessages(library(data.table))
 
 test_check("data.table.ext")

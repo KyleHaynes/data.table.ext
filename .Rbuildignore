@@ -1,3 +1,7 @@
 ^\.claude$
 ^script\.R$
 ^LICENSE\.md$
+^\.Rproj\.user$
+^\.github$
+^benchmarks$
+^inst/slides/.*\.html$
