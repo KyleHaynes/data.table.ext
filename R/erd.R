@@ -109,7 +109,7 @@ duckdt_mermaid_cdn <- "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.
 # ---- template plumbing -----------------------------------------------------
 
 duckdt_asset <- function(...) {
-  path <- system.file(..., package = "duckdt")
+  path <- system.file(..., package = "data.table.ext")
   if (!nzchar(path)) {
     stop("duckdt: could not find the packaged file ", file.path(...),
       ". Is the package installed correctly?", call. = FALSE)
