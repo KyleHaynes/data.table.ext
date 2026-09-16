@@ -21,11 +21,13 @@
 # Row counts / repetitions can be overridden (handy for a quick smoke test):
 #   DUCKDT_BENCH_SIZES=1000,5000 DUCKDT_BENCH_REPS=1 Rscript benchmarks/benchmark_io.R
 
+# Give on.exit() a function scope when this file is run with Rscript.
+local({
 suppressPackageStartupMessages({
   library(data.table)
   library(DBI)
   library(duckdb)
-  library(duckdt)
+  library(data.table.ext)
 })
 
 has_arrow <- requireNamespace("arrow", quietly = TRUE)
@@ -161,3 +163,4 @@ setorder(results, n, op, format)
 print(results)
 
 invisible(results)
+})

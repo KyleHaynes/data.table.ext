@@ -25,18 +25,24 @@ NULL
 # rendered per-dialect since MS SQL Server has no LIMIT clause. `sel` is the
 # projection, "*" unless binary columns had to be dropped from it.
 duckdt_limit_sql <- function(qtbl, n, dialect, sel = "*") {
+  # A limit can exceed R's integer range even for a small source table.
+  n_sql <- format(trunc(n), scientific = FALSE, trim = TRUE)
   if (dialect == "mssql") {
-    paste0("SELECT TOP (", as.integer(n), ") ", sel, " FROM ", qtbl)
+    paste0("SELECT TOP (", n_sql, ") ", sel, " FROM ", qtbl)
   } else {
-    paste0("SELECT ", sel, " FROM ", qtbl, " LIMIT ", as.integer(n))
+    paste0("SELECT ", sel, " FROM ", qtbl, " LIMIT ", n_sql)
   }
 }
 
 #' @rdname duckdt-head-tail
 #' @exportS3Method utils::head
 head.duckdt <- function(x, n = 6L, ...) {
-  nr <- dim(x)[1]
-  n <- if (n < 0) max(nr + n, 0) else min(n, nr)
+  # LIMIT/TOP already stop at the available rows. Counting first can force
+  # a full scan of a file-backed view just to preview a handful of rows.
+  if (n < 0 || is.infinite(n)) {
+    nr <- dim(x)[1]
+    n <- if (n < 0) max(nr + n, 0) else nr
+  }
   dialect <- duckdt_dialect(x$conn)
   sql <- duckdt_limit_sql(duckdt_qtbl(x), n, dialect, duckdt_star(x))
   # `[]` works around a data.table quirk where setDT() suppresses the next
@@ -83,8 +89,7 @@ duckdt_tail_sql <- function(qtbl, n, off, dialect, sel = "*") {
 #' @return A `data.table` of `n` sampled rows.
 #' @export
 duckdt_sample <- function(x, n) {
-  nr <- dim(x)[1]
-  n <- min(as.integer(n), nr)
+  n <- as.integer(n)
   dialect <- duckdt_dialect(x$conn)
   sql <- duckdt_sample_sql(duckdt_qtbl(x), n, dialect, duckdt_star(x))
   data.table::setDT(DBI::dbGetQuery(x$conn, sql))[]

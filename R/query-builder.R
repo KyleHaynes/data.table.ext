@@ -54,8 +54,8 @@ duckdt_dm_query <- function(dm, tables, columns = NULL, where = NULL, limit = NU
   plan <- duckdt_join_plan(dm, tables)
 
   # Disambiguate a column name that several selected tables have.
-  counts <- table(unlist(picked))
-  select <- unlist(lapply(c(plan$order, plan$unjoined), function(t) {
+  counts <- table(unlist(picked[plan$order]))
+  select <- unlist(lapply(plan$order, function(t) {
     vapply(picked[[t]], function(col) {
       expr <- paste0(alias[[t]], ".", duckdt_quote(col))
       if (counts[[col]] > 1) {
@@ -74,8 +74,8 @@ duckdt_dm_query <- function(dm, tables, columns = NULL, where = NULL, limit = NU
   for (j in plan$joins) {
     on <- paste(sprintf(
       "%s.%s = %s.%s",
-      alias[[j$link$table]], duckdt_quote(j$link$column),
-      alias[[j$link$ref]], duckdt_quote(j$link$ref_col)
+      unlist(alias[j$link$table], use.names = FALSE), duckdt_quote(j$link$column),
+      unlist(alias[j$link$ref], use.names = FALSE), duckdt_quote(j$link$ref_col)
     ), collapse = "\n   AND ")
     sql <- paste0(
       sql, "\nLEFT JOIN ", duckdt_qualified(tabs, j$table), " AS ", alias[[j$table]],

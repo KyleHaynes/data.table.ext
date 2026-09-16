@@ -57,8 +57,18 @@ arith <- function(expr, sqlop, cols, env, conn, dialect) {
 translate_in <- function(expr, cols, env, conn, dialect) {
   lhs <- translate_expr(expr[[2]], cols, env, conn, dialect)
   vals <- eval(expr[[3]], envir = env)
-  vals_sql <- vapply(vals, translate_literal, character(1), conn = conn, dialect = dialect)
-  paste0(lhs, " IN (", paste(vals_sql, collapse = ", "), ")")
+  if (!length(vals)) return("(1 = 0)")
+  missing <- is.na(vals)
+  vals_sql <- vapply(unique(vals[!missing]), translate_literal, character(1), conn = conn, dialect = dialect)
+  if (!length(vals_sql)) return(paste0("(", lhs, " IS NULL)"))
+  member <- paste0(lhs, " IN (", paste(vals_sql, collapse = ", "), ")")
+  # R's %in% never returns NA. Make the NULL case explicit so negating
+  # membership also retains missing rows when NA is absent from the set.
+  if (any(missing)) {
+    paste0("(", member, " OR ", lhs, " IS NULL)")
+  } else {
+    paste0("(", member, " AND ", lhs, " IS NOT NULL)")
+  }
 }
 
 translate_between <- function(expr, cols, env, conn, dialect) {
@@ -107,8 +117,8 @@ translate_call_default <- function(expr, fn, cols, env, conn, dialect) {
     arg_sql <- translate_expr(expr[[2]], cols, env, conn, dialect)
     return(paste0("PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ", arg_sql, ")"))
   }
-  sql_fn <- FN_MAP[[dialect]][[fn]]
-  if (is.null(sql_fn)) sql_fn <- toupper(fn)
+  sql_fn <- unname(FN_MAP[[dialect]][fn])
+  if (is.na(sql_fn)) sql_fn <- toupper(fn)
   args <- lapply(as.list(expr)[-1], translate_expr, cols = cols, env = env, conn = conn, dialect = dialect)
   paste0(sql_fn, "(", paste(unlist(args), collapse = ", "), ")")
 }
@@ -220,7 +230,7 @@ translate_by <- function(expr, cols, env, conn, dialect) {
   if (is.character(expr)) {
     aliases <- expr
     parts <- vapply(expr, function(nm) as.character(DBI::dbQuoteIdentifier(conn, nm)), character(1))
-    return(list(parts = unname(parts), aliases = aliases))
+    return(list(parts = unname(parts), aliases = aliases, group_parts = unname(parts)))
   }
 
   if (is.call(expr) && as.character(expr[[1]]) %in% c(".", "list", "c")) {
@@ -229,25 +239,29 @@ translate_by <- function(expr, cols, env, conn, dialect) {
     if (is.null(nms)) nms <- rep("", length(args))
     parts <- character(length(args))
     aliases <- character(length(args))
+    group_parts <- character(length(args))
     for (i in seq_along(args)) {
       a <- args[[i]]
       if (is.character(a) && length(a) == 1 && !nzchar(nms[i])) {
         # e.g. by = c("cyl", "gear") -- a string naming a column, not a value
         alias <- a
         parts[i] <- as.character(DBI::dbQuoteIdentifier(conn, a))
+        group_parts[i] <- parts[i]
       } else {
         sql <- translate_expr(a, cols, env, conn, dialect)
         alias <- if (nzchar(nms[i])) nms[i] else if (is.symbol(a)) as.character(a) else deparse(a)
         parts[i] <- if (nzchar(nms[i])) paste0(sql, " AS ", DBI::dbQuoteIdentifier(conn, alias)) else sql
+        group_parts[i] <- sql
       }
       aliases[i] <- alias
     }
-    return(list(parts = parts, aliases = aliases))
+    return(list(parts = parts, aliases = aliases, group_parts = group_parts))
   }
 
   if (is.symbol(expr)) {
     nm <- as.character(expr)
-    return(list(parts = as.character(DBI::dbQuoteIdentifier(conn, nm)), aliases = nm))
+    part <- as.character(DBI::dbQuoteIdentifier(conn, nm))
+    return(list(parts = part, aliases = nm, group_parts = part))
   }
 
   stop("duckdt: unsupported `by` expression: ", deparse(expr), call. = FALSE)

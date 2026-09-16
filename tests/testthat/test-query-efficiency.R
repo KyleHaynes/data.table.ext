@@ -1,0 +1,12 @@
+test_that("positive head and sampling do not request full table dimensions", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  d <- as.duckdt(data.frame(x = 1:3), conn = con, name = "preview")
+  local_mocked_bindings(dim.duckdt = function(x) stop("full count requested"))
+  expect_identical(head(d, 2)$x, 1:2)
+  expect_identical(head(d, 20)$x, 1:3)
+  expect_identical(head(d, .Machine$integer.max + 1)$x, 1:3)
+  expect_identical(head(d, 0)$x, integer())
+  expect_equal(nrow(duckdt_sample(d, 2)), 2L)
+  expect_equal(nrow(duckdt_sample(d, 20)), 3L)
+})

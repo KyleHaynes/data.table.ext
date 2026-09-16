@@ -5,7 +5,9 @@
 # Needs the chromote package and a Chrome/Edge install. Only worth re-running
 # when the explorer page itself changes.
 
-library(duckdt)
+# Give on.exit() a function scope so the database and browser are closed.
+local({
+library(data.table.ext)
 source(file.path("inst", "slides", "demo-db.R"))
 
 img_dir <- file.path("inst", "slides", "img")
@@ -44,3 +46,4 @@ Sys.sleep(1)
 
 b$screenshot(filename = file.path(img_dir, "explorer.png"))
 message("wrote ", file.path(img_dir, "explorer.png"))
+})

@@ -6,8 +6,12 @@
 # addresses) plus a messy inbound client file pointing at it.
 
 demo_address_db <- function(path = ":memory:") {
-  if (path != ":memory:" && file.exists(path)) unlink(path)
-  con <- duckdt::duckdt_connect(path, quiet = TRUE)
+  if (path != ":memory:" && file.exists(path)) {
+    stop("Demo database already exists: ", path, call. = FALSE)
+  }
+  con <- data.table.ext::duckdt_connect(path, quiet = TRUE)
+  ready <- FALSE
+  on.exit(if (!ready) data.table.ext::duckdt_disconnect(con), add = TRUE)
 
   DBI::dbExecute(con, "
     CREATE TABLE states (
@@ -67,5 +71,6 @@ demo_address_db <- function(path = ":memory:") {
     (7, 'One Martin Place Sydney',               NULL),
     (8, '44 pitt st, sydney nsw 2000',           108)")
 
+  ready <- TRUE
   con
 }

@@ -86,6 +86,6 @@ duckdt_select_sql <- function(x, ie, je, bye, has_i, has_j, has_by, env, to_r = 
 
   sql <- paste0("SELECT ", paste(parts, collapse = ", "), " FROM ", duckdt_qtbl(x))
   if (!is.null(where_sql)) sql <- paste0(sql, " WHERE ", where_sql)
-  if (!is.null(by_res)) sql <- paste0(sql, " GROUP BY ", paste(by_res$parts, collapse = ", "))
+  if (!is.null(by_res)) sql <- paste0(sql, " GROUP BY ", paste(by_res$group_parts, collapse = ", "))
   sql
 }

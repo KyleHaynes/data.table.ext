@@ -16,9 +16,9 @@ A \code{data.table} with one row per foreign-key column: \code{fk_schema},
 \code{pk_table}, \code{pk_column} (the referenced side).
 }
 \description{
-Queries the portable \code{information_schema.referential_constraints}/
-\code{key_column_usage} views (works against both DuckDB and MS SQL Server
-connections). Only relationships the database actually declares as
+Queries \code{information_schema} on DuckDB and \code{sys.foreign_key_columns}
+on MS SQL Server, pairing each referencing column with its target.
+Only relationships the database actually declares as
 constraints are returned — this does not guess relationships from
 column-naming conventions. If the connected database/version doesn't
 expose these views, returns a zero-row \code{data.table} rather than erroring.

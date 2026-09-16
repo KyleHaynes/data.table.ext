@@ -397,9 +397,9 @@ dupe_dt <- function(dt, by = NULL, color = .sample_dt_color_default()) {
 
     ans <- data.table::copy(dt)
     ans[, .dupe_group := .GRP, by = by]
-    ans[, .dupe_n := .N, by = ".dupe_group"]
-    ans <- ans[ans$.dupe_n > 1L]
-    data.table::set(ans, j = ".dupe_n", value = NULL)
+    duplicate_rows <- duplicated(ans, by = ".dupe_group") |
+        duplicated(ans, by = ".dupe_group", fromLast = TRUE)
+    ans <- ans[duplicate_rows]
     data.table::setorderv(ans, ".dupe_group")
 
     if (nrow(ans)) {

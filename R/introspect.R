@@ -67,9 +67,9 @@ duckdt_schema <- function(conn, table = NULL) {
 
 #' List foreign-key relationships between tables in a database
 #'
-#' Queries the portable `information_schema.referential_constraints`/
-#' `key_column_usage` views (works against both DuckDB and MS SQL Server
-#' connections). Only relationships the database actually declares as
+#' Queries `information_schema` on DuckDB and `sys.foreign_key_columns`
+#' on MS SQL Server, pairing each referencing column with its target.
+#' Only relationships the database actually declares as
 #' constraints are returned — this does not guess relationships from
 #' column-naming conventions. If the connected database/version doesn't
 #' expose these views, returns a zero-row `data.table` rather than erroring.
@@ -83,8 +83,26 @@ duckdt_schema <- function(conn, table = NULL) {
 #' @export
 duckdt_relationships <- function(conn) {
   conn <- duckdt_unwrap_conn(conn)
-  fks <- tryCatch(
-    DBI::dbGetQuery(conn, "
+  sql <- if (duckdt_dialect(conn) == "mssql") {
+    # SQL Server's information_schema omits the referenced-column position.
+    # Its catalog records exact column pairs, including compound keys.
+    "
+      SELECT
+        fs.name AS fk_schema, ft.name AS fk_table, fc.name AS fk_column,
+        ps.name AS pk_schema, pt.name AS pk_table, pc.name AS pk_column
+      FROM sys.foreign_key_columns fkc
+      JOIN sys.tables ft ON ft.object_id = fkc.parent_object_id
+      JOIN sys.schemas fs ON fs.schema_id = ft.schema_id
+      JOIN sys.columns fc ON fc.object_id = fkc.parent_object_id
+                         AND fc.column_id = fkc.parent_column_id
+      JOIN sys.tables pt ON pt.object_id = fkc.referenced_object_id
+      JOIN sys.schemas ps ON ps.schema_id = pt.schema_id
+      JOIN sys.columns pc ON pc.object_id = fkc.referenced_object_id
+                         AND pc.column_id = fkc.referenced_column_id
+      ORDER BY fs.name, ft.name, fkc.constraint_object_id, fkc.constraint_column_id
+    "
+  } else {
+    "
       SELECT
         kcu1.table_schema AS fk_schema, kcu1.table_name AS fk_table, kcu1.column_name AS fk_column,
         kcu2.table_schema AS pk_schema, kcu2.table_name AS pk_table, kcu2.column_name AS pk_column
@@ -92,10 +110,17 @@ duckdt_relationships <- function(conn) {
       JOIN information_schema.key_column_usage kcu1
         ON rc.constraint_name = kcu1.constraint_name
        AND rc.constraint_schema = kcu1.table_schema
+       AND rc.constraint_catalog = kcu1.constraint_catalog
       JOIN information_schema.key_column_usage kcu2
         ON rc.unique_constraint_name = kcu2.constraint_name
        AND rc.unique_constraint_schema = kcu2.table_schema
-    "),
+       AND rc.unique_constraint_catalog = kcu2.constraint_catalog
+       AND kcu1.position_in_unique_constraint = kcu2.ordinal_position
+      ORDER BY kcu1.table_schema, kcu1.table_name, rc.constraint_name, kcu1.ordinal_position
+    "
+  }
+  fks <- tryCatch(
+    DBI::dbGetQuery(conn, sql),
     error = function(e) data.frame(
       fk_schema = character(), fk_table = character(), fk_column = character(),
       pk_schema = character(), pk_table = character(), pk_column = character()

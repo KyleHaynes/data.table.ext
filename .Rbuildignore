@@ -4,4 +4,5 @@
 ^\.Rproj\.user$
 ^\.github$
 ^benchmarks$
+^R_REVIEW\.md$
 ^inst/slides/.*\.html$

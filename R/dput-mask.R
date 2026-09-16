@@ -20,30 +20,15 @@ enable_dt_dput_mask <- function() {
             return(.dt_print_mask_state$original_dput(x, file = file, control = control))
         }
 
-        # .internal.selfref is a C-level external pointer that can't be removed
-        # via attr<- or setattr. Capture the raw dput text and strip it with regex.
-        dput_lines <- NULL
-        tmp <- textConnection("dput_lines", open = "w", local = TRUE)
-        on.exit(try(close(tmp), silent = TRUE), add = TRUE)
+        # Work on a copy: removing a data.table attribute by reference must
+        # not alter the caller's object. Editing the object also avoids
+        # depending on attribute order or changing matching text in cells.
+        clean <- data.table::copy(x)
+        data.table::setattr(clean, ".internal.selfref", NULL)
         if (missing(control)) {
-            .dt_print_mask_state$original_dput(x, file = tmp)
+            .dt_print_mask_state$original_dput(clean, file = file)
         } else {
-            .dt_print_mask_state$original_dput(x, file = tmp, control = control)
-        }
-        close(tmp)
-        on.exit(NULL)
-
-        text <- paste(dput_lines, collapse = "\n")
-        # Remove ", .internal.selfref = <pointer: ...>)" at the end of structure()
-        text <- gsub(
-            ",\\s*\\.internal\\.selfref\\s*=\\s*<pointer:[^>]*>\\s*\\)",
-            ")",
-            text
-        )
-        if (identical(file, "")) {
-            cat(text, "\n", sep = "")
-        } else {
-            writeLines(text, con = file)
+            .dt_print_mask_state$original_dput(clean, file = file, control = control)
         }
         invisible(x)
     }

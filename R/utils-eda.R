@@ -45,7 +45,7 @@ freq_dt <- function(dt, col, n = 20L) {
     if (!(col_name %in% names(dt))) {
         stop(sprintf("Column '%s' not found in 'dt'.", col_name), call. = FALSE)
     }
-    n <- suppressWarnings(as.numeric(n[[1L]]))
+    n <- suppressWarnings(as.numeric(n[1L]))
     if (is.na(n) || n <= 0) {
         stop("'n' must be a positive number.", call. = FALSE)
     }
@@ -54,7 +54,7 @@ freq_dt <- function(dt, col, n = 20L) {
     data.table::setorder(counts, -N)
     counts[, pct := N / sum(N)]
     data.table::setnames(counts, "N", "n")
-    n_limit <- min(nrow(counts), as.integer(n))
+    n_limit <- as.integer(min(nrow(counts), n))
     counts[seq_len(n_limit)][]
 }
 
