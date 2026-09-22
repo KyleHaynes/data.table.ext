@@ -28,12 +28,12 @@ Translates \code{i} (row filter), \code{j} (column select/compute), and \code{by
 result as a \code{data.table}. \code{j} may also be a \verb{:=} call, in which case the
 underlying DuckDB table is mutated instead (see the write-path notes in
 the package README); this requires a materialized, writable table (see
-\code{\link[=as.duckdt]{as.duckdt()}}'s \code{copy} argument and \code{\link[=duckdt]{duckdt()}}'s \code{writable} argument).
+\code{\link[=as.dbdt]{as.dbdt()}}'s \code{copy} argument and \code{\link[=dbdt]{dbdt()}}'s \code{writable} argument).
 }
 \details{
 Because this returns a \code{data.table}, the result has left the database --
 it can no longer be used where a \code{"duckdt"} handle is expected (e.g. as an
-argument to \code{\link[=duckdt_join]{duckdt_join()}} or \code{\link[=duckdt_merge]{duckdt_merge()}}). Use \code{\link[=duckdt_temp]{duckdt_temp()}} to
+argument to \code{\link[=dbdt_join]{dbdt_join()}} or \code{\link[=dbdt_merge]{dbdt_merge()}}). Use \code{\link[=dbdt_temp]{dbdt_temp()}} to
 run the same \code{i}/\code{j}/\code{by} query into a temporary table and get a handle
 back instead, keeping the rows in DuckDB.
 
@@ -42,6 +42,6 @@ MS SQL Server) are left out when \code{j} is missing: no driver hands them back
 as an R vector, and asking for one fails the whole query rather than just
 that column, so a single binary column would otherwise make the table
 unreadable. Naming one in \code{j} (\code{d[, .(payload)]}) still selects it, and
-nothing that stays in the database -- \verb{:=}, \code{\link[=duckdt_temp]{duckdt_temp()}},
-\code{\link[=duckdt_merge]{duckdt_merge()}} -- is affected.
+nothing that stays in the database -- \verb{:=}, \code{\link[=dbdt_temp]{dbdt_temp()}},
+\code{\link[=dbdt_merge]{dbdt_merge()}} -- is affected.
 }

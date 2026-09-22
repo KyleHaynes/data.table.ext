@@ -11,11 +11,11 @@ do once you have a `"duckdt"` handle.
 By default `duckdt` opens an **in-memory** DuckDB database that disappears
 when the connection closes. To persist data, open the connection yourself
 against a file path with `duckdb::duckdb(dbdir = ...)`, then write your
-`data.table` into it with `as.duckdt(..., copy = TRUE)`:
+`data.table` into it with `as.dbdt(..., copy = TRUE)`:
 
 ```r
 library(data.table)
-library(duckdt)
+library(data.table.ext)
 
 sales <- data.table(
   order_id = 1:5,
@@ -25,7 +25,7 @@ sales <- data.table(
 
 con <- DBI::dbConnect(duckdb::duckdb(dbdir = "C:/temp/sales.duckdb"))
 
-d <- as.duckdt(sales, conn = con, name = "sales", copy = TRUE)
+d <- as.dbdt(sales, conn = con, name = "sales", copy = TRUE)
 #   copy = TRUE -> physically writes the data into the file (not a view)
 #   name        -> table name inside the database (defaults to the object's
 #                  deparsed name, "sales" here, if you omit it)
@@ -44,29 +44,29 @@ having to escape backslashes.
 ## 2. Reconnect later and see what's there
 
 In a new R session (or later in the same one), open the same file again.
-`duckdt_connect()` is `DBI::dbConnect(duckdb::duckdb(dbdir = ...))` with a
+`dbdt_connect()` is `DBI::dbConnect(duckdb::duckdb(dbdir = ...))` with a
 summary of what it found:
 
 ```r
-con <- duckdt_connect("C:/temp/sales.duckdb")
+con <- dbdt_connect("C:/temp/sales.duckdb")
 #> v Connected to DuckDB: C:/temp/sales.duckdb
 #> i 1 table: "sales"
-#> > `duckdt_erd(con)` to explore the tables and how they connect
-#> > `duckdt(con, "sales")` to query one with data.table syntax
+#> > `dbdt_erd(con)` to explore the tables and how they connect
+#> > `dbdt(con, "sales")` to query one with data.table syntax
 
-duckdt_tables(con)
+dbdt_tables(con)
 #>    schema   name       type
 #> 1:   main  sales BASE TABLE
 ```
 
-For a file with more than a couple of tables in it, `duckdt_erd(con)` opens a
+For a file with more than a couple of tables in it, `dbdt_erd(con)` opens a
 diagram of all of them (and of how they connect) in your browser, and writes
 the query for whichever tables and columns you tick -- see
 [Exploring a database](README.md#exploring-a-database).
 
 ## 3. Wrap the table and query it
 
-`duckdt(conn, table_name)` wraps an existing table as a `"duckdt"` handle,
+`dbdt(conn, table_name)` wraps an existing table as a `"duckdt"` handle,
 after which `d[i, j, by]` works exactly like data.table. Handles from this
 constructor are **read-only by default** -- a guard against accidentally
 mutating a table you only meant to explore after reconnecting to a file (see
@@ -74,7 +74,7 @@ mutating a table you only meant to explore after reconnecting to a file (see
 this:
 
 ```r
-d <- duckdt(con, "sales")
+d <- dbdt(con, "sales")
 
 d[, .(total = sum(amount), n = .N), by = customer]
 #>    customer  total n
@@ -88,7 +88,8 @@ d[amount > 50]
 Every `[` call runs immediately against the file on disk and returns a real
 `data.table` — nothing is loaded into R until you ask for it. Row order isn't
 guaranteed (DuckDB tables are unordered without an explicit `ORDER BY`) —
-add `order(...)` if you need a specific order, e.g. `d[order(customer)]`.
+sort the result if you need a specific order, e.g. `d[amount > 50][order(customer)]`
+(`order()` isn't supported inside `i` on a handle, so sort the returned `data.table`).
 
 ## 4. Write changes back (optional)
 
@@ -104,14 +105,14 @@ Opt in explicitly by re-wrapping with `writable = TRUE` once you actually
 mean to write:
 
 ```r
-d <- duckdt(con, "sales", writable = TRUE)
+d <- dbdt(con, "sales", writable = TRUE)
 d[, amount_incl_tax := amount * 1.1]   # now allowed, persisted to the file
 ```
 
 ## 5. Disconnect when done
 
 ```r
-duckdt_disconnect(con)   # or DBI::dbDisconnect(con, shutdown = TRUE)
+dbdt_disconnect(con)   # or DBI::dbDisconnect(con, shutdown = TRUE)
 ```
 
 Shutting the database down (which both of these do) flushes DuckDB's

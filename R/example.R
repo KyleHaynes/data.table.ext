@@ -2,8 +2,8 @@
 #'
 #' Creates a small in-memory DuckDB database -- four tables of a toy shop
 #' schema, with real primary and foreign keys declared, and a few rows in
-#' each. Somewhere to point [duckdt_erd()], [duckdt_explorer()] or
-#' [duckdt_data_model()] when you want to see what they do before aiming
+#' each. Somewhere to point [dbdt_erd()], [dbdt_explorer()] or
+#' [dbdt_data_model()] when you want to see what they do before aiming
 #' them at a database of your own.
 #'
 #' The tables are `customers`, `items`, `orders` and `order_lines`;
@@ -13,16 +13,16 @@
 #' @param quiet Skip the message describing what was created.
 #'
 #' @return A `DBI` connection to a new in-memory DuckDB database. Close it
-#'   with [duckdt_disconnect()].
+#'   with [dbdt_disconnect()].
 #' @examples
-#' con <- duckdt_example(quiet = TRUE)
-#' duckdt_tables(con)
-#' duckdt_data_model(con)
+#' con <- dbdt_example(quiet = TRUE)
+#' dbdt_tables(con)
+#' dbdt_data_model(con)
 #'
-#' d <- duckdt(con, "orders")
+#' d <- dbdt(con, "orders")
 #' d[, .N, by = customer_id]
 #'
-#' duckdt_disconnect(con)
+#' dbdt_disconnect(con)
 #' @export
 duckdt_example <- function(quiet = FALSE) {
   con <- DBI::dbConnect(duckdb::duckdb())
@@ -75,8 +75,8 @@ duckdt_example <- function(quiet = FALSE) {
   if (!quiet) {
     cli::cli_inform(c(
       "v" = "Example database ready: {.val customers}, {.val items}, {.val orders}, {.val order_lines}.",
-      ">" = "{.code duckdt_erd(con)} to see the tables and how they connect",
-      ">" = "{.code duckdt(con, \"orders\")[, .N, by = customer_id]} to query one"
+      ">" = "{.code dbdt_erd(con)} to see the tables and how they connect",
+      ">" = "{.code dbdt(con, \"orders\")[, .N, by = customer_id]} to query one"
     ))
   }
   con

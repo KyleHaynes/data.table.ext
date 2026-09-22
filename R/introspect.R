@@ -13,12 +13,16 @@
 #' @export
 duckdt_tables <- function(conn) {
   conn <- duckdt_unwrap_conn(conn)
-  data.table::setDT(DBI::dbGetQuery(conn, "
-    SELECT table_schema AS schema, table_name AS name, table_type AS type
+  out <- data.table::setDT(DBI::dbGetQuery(conn, "
+    SELECT table_schema, table_name, table_type
     FROM information_schema.tables
     WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
     ORDER BY table_schema, table_name
-  "))[]
+  "))
+  # Rename in R: SCHEMA is a reserved word on SQL Server.
+  # Rename by position: drivers may return uppercase catalogue field names.
+  data.table::setnames(out, c("schema", "name", "type"))
+  out[]
 }
 
 #' List the columns of a database's tables
@@ -38,31 +42,41 @@ duckdt_tables <- function(conn) {
 #' @export
 duckdt_schema <- function(conn, table = NULL) {
   conn <- duckdt_unwrap_conn(conn)
+  if (!is.null(table) && (!is.character(table) || length(table) != 1L || is.na(table))) {
+    stop("`table` must be NULL or a single table name.", call. = FALSE)
+  }
+  table_filter <- if (is.null(table)) "" else paste0(
+    " AND table_name = ", DBI::dbQuoteString(conn, table)
+  )
 
-  cols <- DBI::dbGetQuery(conn, "
+  cols <- data.table::setDT(DBI::dbGetQuery(conn, paste0("
     SELECT
-      table_schema AS schema, table_name AS \"table\", column_name AS \"column\",
-      data_type AS type, ordinal_position
+      table_schema, table_name, column_name, data_type, ordinal_position
     FROM information_schema.columns
-    WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
+    WHERE table_schema NOT IN ('information_schema', 'pg_catalog')", table_filter, "
     ORDER BY table_schema, table_name, ordinal_position
-  ")
+  ")))
+  data.table::setnames(cols, c("schema", "table", "column", "type", "ordinal_position"))
 
-  pks <- DBI::dbGetQuery(conn, "
-    SELECT tc.table_schema AS schema, tc.table_name AS \"table\", kcu.column_name AS \"column\"
+  pk_filter <- if (is.null(table)) "" else paste0(
+    " AND tc.table_name = ", DBI::dbQuoteString(conn, table)
+  )
+  pks <- data.table::setDT(DBI::dbGetQuery(conn, paste0("
+    SELECT tc.table_schema, tc.table_name, kcu.column_name
     FROM information_schema.table_constraints tc
     JOIN information_schema.key_column_usage kcu
       ON tc.constraint_name = kcu.constraint_name
      AND tc.table_schema = kcu.table_schema
-    WHERE tc.constraint_type = 'PRIMARY KEY'
-  ")
+     AND tc.table_catalog = kcu.table_catalog
+     AND tc.table_name = kcu.table_name
+    WHERE tc.constraint_type = 'PRIMARY KEY'", pk_filter
+  )))
+  data.table::setnames(pks, c("schema", "table", "column"))
 
   cols$primary_key <- duckdt_row_key(cols$schema, cols$table, cols$column) %in%
     duckdt_row_key(pks$schema, pks$table, pks$column)
 
-  if (!is.null(table)) cols <- cols[cols$table == table, , drop = FALSE]
-
-  data.table::setDT(cols)[]
+  cols[]
 }
 
 #' List foreign-key relationships between tables in a database

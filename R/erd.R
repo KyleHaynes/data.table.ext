@@ -1,6 +1,6 @@
 #' Explore a database's tables and relationships in your browser
 #'
-#' Builds a data model ([duckdt_data_model()]) and writes it to a
+#' Builds a data model ([dbdt_data_model()]) and writes it to a
 #' self-contained HTML page: an ER diagram of the tables you tick, a
 #' searchable list of every table and column, and -- as you tick columns --
 #' the `duckdt`/SQL code that selects exactly those, ready to copy. Useful
@@ -11,8 +11,8 @@
 #' Only foreign keys the database actually declares as constraints are drawn.
 #' DuckDB files built by loading CSV/Parquet usually declare none, in which
 #' case pass `infer_references = TRUE` to guess them from column names (see
-#' [duckdt_dm_infer_references()] for exactly what that guesses), or state
-#' them yourself with [duckdt_dm_add_references()] and pass the resulting
+#' [dbdt_dm_infer_references()] for exactly what that guesses), or state
+#' them yourself with [dbdt_dm_add_references()] and pass the resulting
 #' model straight to this function.
 #'
 #' The page renders its diagram with [Mermaid](https://mermaid.js.org/)
@@ -21,7 +21,7 @@
 #' which is replaced by its source.
 #'
 #' @param x A `DBI` connection, a `"duckdt"` object, or a
-#'   `"duckdt_data_model"` (from [duckdt_data_model()], so you can filter or
+#'   `"duckdt_data_model"` (from [dbdt_data_model()], so you can filter or
 #'   annotate it first).
 #' @param tables Optionally, a character vector of tables to model. Others
 #'   are left out entirely.
@@ -32,7 +32,7 @@
 #' @param open Open the generated page with [utils::browseURL()]. Default
 #'   `TRUE`.
 #' @param infer_references Guess undeclared foreign keys from column naming
-#'   conventions, via [duckdt_dm_infer_references()]. Default `FALSE`.
+#'   conventions, via [dbdt_dm_infer_references()]. Default `FALSE`.
 #' @param select Tables to start with ticked. Defaults to all of them when
 #'   there are 12 or fewer, otherwise none.
 #' @param view Initial level of detail: `"all"` columns, `"keys_only"` or
@@ -44,16 +44,16 @@
 #'   diagram source attached as its `"mermaid"` attribute (so it can be
 #'   dropped straight into an Rmd/Quarto ```` ```mermaid ```` chunk) and the
 #'   data model as its `"data_model"` attribute.
-#' @seealso [duckdt_explorer()] for the Shiny version, which also previews
-#'   and runs the query; [duckdt_dm_mermaid()] and [duckdt_dm_dot()] for the
+#' @seealso [dbdt_explorer()] for the Shiny version, which also previews
+#'   and runs the query; [dbdt_dm_mermaid()] and [dbdt_dm_dot()] for the
 #'   diagram sources on their own.
 #' @examples
-#' con <- duckdt_connect(quiet = TRUE)
+#' con <- dbdt_connect(quiet = TRUE)
 #' DBI::dbExecute(con, "CREATE TABLE customers (id INTEGER PRIMARY KEY, name VARCHAR)")
 #' DBI::dbExecute(con, "CREATE TABLE orders (
 #'   id INTEGER PRIMARY KEY, customer_id INTEGER REFERENCES customers(id), total DOUBLE)")
 #'
-#' path <- duckdt_erd(con, open = FALSE)
+#' path <- dbdt_erd(con, open = FALSE)
 #' cat(attr(path, "mermaid"))
 #' DBI::dbDisconnect(con, shutdown = TRUE)
 #' @export

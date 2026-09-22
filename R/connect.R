@@ -4,7 +4,7 @@
 #' `DBI::dbConnect(duckdb::duckdb(dbdir = ...))`. The only things it adds are
 #' defaults worth having and a summary of what you just connected to: how
 #' many tables are in there, and the two calls that get you moving --
-#' [duckdt_erd()] to see the whole schema, [duckdt()] to query one table with
+#' [dbdt_erd()] to see the whole schema, [dbdt()] to query one table with
 #' `data.table` syntax.
 #'
 #' You never have to use this: every function in duckdt takes a plain `DBI`
@@ -21,19 +21,19 @@
 #' @param ... Passed to [duckdb::duckdb()].
 #'
 #' @return A `DBI` connection to DuckDB. Close it with
-#'   [duckdt_disconnect()] when you're done.
-#' @seealso [duckdt_erd()] to visualise the database you just opened,
-#'   [duckdt()] to wrap one of its tables.
+#'   [dbdt_disconnect()] when you're done.
+#' @seealso [dbdt_erd()] to visualise the database you just opened,
+#'   [dbdt()] to wrap one of its tables.
 #' @examples
-#' con <- duckdt_connect()                       # in-memory scratch database
-#' d <- as.duckdt(mtcars, conn = con, copy = TRUE)
+#' con <- dbdt_connect()                       # in-memory scratch database
+#' d <- as.dbdt(mtcars, conn = con, copy = TRUE)
 #' d[cyl == 6, .(mpg, hp)]
-#' duckdt_disconnect(con)
+#' dbdt_disconnect(con)
 #'
 #' \dontrun{
 #' # A database file on disk, read-only because we're only looking:
-#' con <- duckdt_connect("C:/data/warehouse.duckdb", read_only = TRUE)
-#' duckdt_erd(con)
+#' con <- dbdt_connect("C:/data/warehouse.duckdb", read_only = TRUE)
+#' dbdt_erd(con)
 #' }
 #' @export
 duckdt_connect <- function(dbdir = ":memory:", read_only = FALSE, quiet = FALSE, ...) {
@@ -46,7 +46,7 @@ duckdt_connect <- function(dbdir = ":memory:", read_only = FALSE, quiet = FALSE,
 #'   closed).
 #' @param shutdown Also shut the DuckDB database down, releasing the file.
 #'   Default `TRUE`.
-#' @return `duckdt_disconnect()` returns `TRUE` invisibly.
+#' @return `dbdt_disconnect()` returns `TRUE` invisibly.
 #' @rdname duckdt_connect
 #' @export
 duckdt_disconnect <- function(conn, shutdown = TRUE) {
@@ -78,14 +78,14 @@ duckdt_connect_message <- function(conn, dbdir = NULL) {
       if (length(names) > length(shown)) sprintf(" and %d more", length(names) - length(shown)) else ""
     ))
     msg <- c(msg,
-      ">" = "{.code duckdt_erd(con)} to explore the tables and how they connect",
-      ">" = paste0("{.code duckdt(con, \"", names[1], "\")} to query one with data.table syntax")
+      ">" = "{.code dbdt_erd(con)} to explore the tables and how they connect",
+      ">" = paste0("{.code dbdt(con, \"", names[1], "\")} to query one with data.table syntax")
     )
   } else {
     msg <- c(msg,
       "i" = "No tables yet.",
-      ">" = "{.code as.duckdt(mtcars, conn = con, copy = TRUE)} to put a data.frame in one",
-      ">" = "{.code duckdt_csv(\"data.csv\", conn = con)} to read a file without loading it into R"
+      ">" = "{.code as.dbdt(mtcars, conn = con, copy = TRUE)} to put a data.frame in one",
+      ">" = "{.code dbdt_csv(\"data.csv\", conn = con)} to read a file without loading it into R"
     )
   }
   cli::cli_inform(msg)
@@ -100,7 +100,7 @@ duckdt_hint_erd <- function() {
   duckdt_env$hinted_erd <- TRUE
   cli::cli_inform(c(
     "i" = "duckdt opened an in-memory DuckDB database for this.",
-    ">" = "{.fn duckdt_erd} on it (or any connection) draws the tables and how they connect."
+    ">" = "{.fn dbdt_erd} on it (or any connection) draws the tables and how they connect."
   ))
   invisible(NULL)
 }

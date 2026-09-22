@@ -1,26 +1,26 @@
 #' Render a data model as a Mermaid ER diagram
 #'
 #' Mermaid needs no R packages and renders anywhere Markdown does, so this is
-#' what [duckdt_erd()] draws and what to paste into an Rmd/Quarto
+#' what [dbdt_erd()] draws and what to paste into an Rmd/Quarto
 #' ```` ```mermaid ```` chunk or a GitHub comment.
 #'
-#' @param dm A `"duckdt_data_model"` from [duckdt_data_model()], or anything
-#'   [duckdt_data_model()] accepts (a connection, a `"duckdt"` handle, a
+#' @param dm A `"duckdt_data_model"` from [dbdt_data_model()], or anything
+#'   [dbdt_data_model()] accepts (a connection, a `"duckdt"` handle, a
 #'   named list of data frames).
 #' @param view How much of each table to draw: `"all"` columns,
 #'   `"keys_only"` (primary and foreign keys), or `"title_only"`.
 #' @param types Show each column's SQL type. Default `TRUE`.
 #'
 #' @return A length-1 character vector of Mermaid `erDiagram` source.
-#' @seealso [duckdt_dm_dot()] for the Graphviz rendering,
-#'   [duckdt_erd()] for the interactive browser page.
+#' @seealso [dbdt_dm_dot()] for the Graphviz rendering,
+#'   [dbdt_erd()] for the interactive browser page.
 #' @examples
-#' dm <- duckdt_data_model(list(
+#' dm <- dbdt_data_model(list(
 #'   orders = data.frame(id = 1L, customer_id = 1L),
 #'   customers = data.frame(id = 1L, name = "a")
 #' ))
-#' dm <- duckdt_dm_add_references(dm, orders$customer_id == customers$id)
-#' cat(duckdt_dm_mermaid(dm))
+#' dm <- dbdt_dm_add_references(dm, orders$customer_id == customers$id)
+#' cat(dbdt_dm_mermaid(dm))
 #' @export
 duckdt_dm_mermaid <- function(dm, view = c("all", "keys_only", "title_only"),
                               types = TRUE) {

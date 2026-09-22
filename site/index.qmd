@@ -1,0 +1,98 @@
+---
+title: "data.table.ext"
+subtitle: "Friendlier `data.table` output, and `data.table` syntax for DuckDB"
+toc: false
+---
+
+```{r}
+#| include: false
+source("_setup.R")
+```
+
+`data.table.ext` bundles two families of `data.table` extensions in one package.
+
+::: {.grid}
+
+::: {.g-col-12 .g-col-md-6}
+### Display, sampling & readability
+
+Cleaner printing, presentation-friendly grouped sampling, and quick checks for the tables you explore every day.
+
+- Thousands separators, coloured class tokens and a column count on every print
+- `sample_dt()` and `cdt()`: colour-coded, group-aware sampling and display
+- `highlight_dt()`, `dupe_dt()`, `outlier_dt()`: surface the rows that matter
+- `schema_dt()`, `na_dt()`, `freq_dt()`, `key_dt()`, `spark_dt()`: profile a table
+- Friendlier `str()` and `dput()`; markdown export with `md_dt()`
+
+[Printing & sampling](display.qmd){.btn .btn-primary}
+[Data checks & helpers](checks.qmd){.btn .btn-outline-primary}
+:::
+
+::: {.g-col-12 .g-col-md-6}
+### dbdt: databases, data.table style
+
+Write `d[i, j, by]`. It runs as SQL inside [DuckDB](https://duckdb.org/), and only the answer comes back to R as a `data.table`.
+
+- Query in-memory data, `.duckdb` files, CSV and Parquet without loading them into R
+- Joins, upserts and temporary subsets that stay in the database
+- Reverse-engineer a database into a data model and draw it as an interactive ER diagram
+- Pick tables and columns in the diagram; it writes the query for you
+
+[Connect & load](duckdt-connect.qmd){.btn .btn-primary}
+[Query](duckdt-query.qmd){.btn .btn-outline-primary}
+:::
+
+:::
+
+## Install
+
+```r
+# From GitHub
+devtools::install_github("KyleHaynes/data.table.ext")
+
+# Or from a local checkout
+install.packages(".", repos = NULL, type = "source")
+```
+
+`data.table`, `cli`, `DBI` and `duckdb` are installed with it. A few features use optional packages; see [Get started](getting-started.qmd#optional-packages).
+
+## A 60-second tour
+
+Attaching the package turns on the display enhancements. Here is grouped sampling on five rows of each `iris` species: every row for two randomly chosen species, each value coloured so repeats stand out.
+
+```{r}
+DT <- as.data.table(iris)[c(1:5, 51:55, 101:105)]
+sample_dt(DT, n = 2, group = Species)
+```
+
+`dbdt_example()` builds a small in-memory DuckDB database to try things on. `dbdt()` wraps one of its tables, and from there it is ordinary `data.table` syntax:
+
+```{r}
+con <- dbdt_example()
+orders <- dbdt(con, "orders")
+orders[, .(n_orders = .N, first_order = min(ordered_on)), by = customer_id]
+```
+
+Draw the whole database, and the joins between its tables, in your browser:
+
+```r
+dbdt_erd(con)
+```
+
+```{r}
+#| include: false
+dbdt_disconnect(con)
+```
+
+## Where next
+
+| If you want to... | Read |
+|:---|:---|
+| See what attaching the package changes, and how to undo it | [Get started](getting-started.qmd) |
+| Make printing, sampling and `str()` output easier to scan | [Printing & sampling](display.qmd) |
+| Profile a table and find duplicates, outliers and keys | [Data checks & helpers](checks.qmd) |
+| Query a database file, CSV or Parquet with `data.table` syntax | [Connect & load](duckdt-connect.qmd), [Query](duckdt-query.qmd) |
+| Join, update and merge inside the database | [Join, write & merge](duckdt-join-write.qmd) |
+| Understand and draw a database | [Explore a database](duckdt-explore.qmd) |
+| Find a function | [Function reference](reference.qmd) |
+| Know what does not work yet | [Limitations](limitations.qmd) |

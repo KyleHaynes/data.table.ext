@@ -1,0 +1,68 @@
+project:
+  type: website
+  output-dir: _site
+  resources:
+    - assets/*.html
+
+website:
+  title: "data.table.ext"
+  description: "Friendlier data.table output, and data.table syntax for DuckDB and SQL Server."
+  repo-url: https://github.com/KyleHaynes/data.table.ext
+  repo-subdir: site
+  repo-actions: [edit, issue]
+  page-navigation: true
+  navbar:
+    search: true
+    right:
+      - icon: github
+        href: https://github.com/KyleHaynes/data.table.ext
+        aria-label: GitHub
+  sidebar:
+    style: docked
+    search: false
+    collapse-level: 2
+    contents:
+      - href: index.qmd
+        text: Home
+      - getting-started.qmd
+      - section: "Display & data checks"
+        contents:
+          - display.qmd
+          - checks.qmd
+      - section: "dbdt: databases"
+        contents:
+          - duckdt-connect.qmd
+          - duckdt-query.qmd
+          - duckdt-join-write.qmd
+          - duckdt-explore.qmd
+          - duckdt-mssql.qmd
+      - section: "Reference"
+        contents:
+          - reference.qmd
+          - limitations.qmd
+  page-footer:
+    left: "MIT licence"
+    right: "Data model and diagram code ported from [datamodelr](https://github.com/bergant/datamodelr) by Darko Bergant (MIT)."
+
+format:
+  html:
+    theme: flatly
+    css:
+      - ansi.css
+      - styles.css
+    toc: true
+    toc-depth: 3
+    toc-title: "On this page"
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+    smooth-scroll: true
+
+execute:
+  echo: true
+  warning: true
+  error: false
+
+knitr:
+  opts_chunk:
+    comment: ""

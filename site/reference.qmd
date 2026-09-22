@@ -1,0 +1,182 @@
+---
+title: "Function reference"
+description: "Every exported function, grouped by theme, with a line on what it does and where it is covered."
+---
+
+```{r}
+#| include: false
+source("_setup.R")
+
+# Every export must be listed on this page. Anything missing is reported below
+# and in the render log, so the reference cannot quietly fall behind the package.
+src <- readLines("reference.qmd", warn = FALSE)
+listed <- unlist(regmatches(src, gregexpr("`[A-Za-z][A-Za-z0-9._]*\\(", src)))
+listed <- unique(sub("^`", "", sub("\\($", "", listed)))
+unlisted <- sort(setdiff(getNamespaceExports("data.table.ext"), listed))
+```
+
+```{r}
+#| echo: false
+#| results: asis
+if (length(unlisted)) {
+  message("reference.qmd does not list: ", paste(unlisted, collapse = ", "))
+  cat("::: {.callout-warning}\n## Not yet listed\n\n",
+      paste0("`", unlisted, "()`", collapse = ", "), "\n:::\n", sep = "")
+}
+```
+
+The functions are grouped as they are in the startup banner: first the two halves of the package, then what the functions are for. `?name` opens a function's help page, and `help(package = "data.table.ext")` lists them all.
+
+## Display, sampling & readability
+
+### Session {#session}
+
+| Function | What it does | Read more |
+|:---|:---|:---|
+| `turn_everyone_on()` | Turn on the print, `str()` and `dput()` masks and colour by default. Runs when the package is attached. | [Switches](display.qmd#switches) |
+| `enable_dt_print_thousands()` | Mask `print.data.table`: thousands separators, coloured class row, `ncol:` header, group separators | [Print mask](display.qmd#print-mask) |
+| `disable_dt_print_thousands()` | Remove the print mask | [Print mask](display.qmd#print-mask) |
+| `enable_dt_str_mask()` | Mask `str()` for `data.table`s: compact header, no `.internal.selfref` line | [`str()` and `dput()`](display.qmd#str-dput) |
+| `disable_dt_str_mask()` | Remove the `str()` mask | [`str()` and `dput()`](display.qmd#str-dput) |
+| `enable_dt_dput_mask()` | Mask `dput()` so `.internal.selfref` is left out | [`str()` and `dput()`](display.qmd#str-dput) |
+| `disable_dt_dput_mask()` | Remove the `dput()` mask | [`str()` and `dput()`](display.qmd#str-dput) |
+| `switch_col()` | Set the session default for colour in `sample_dt()`, `cdt()` and `dupe_dt()` | [Colour default](display.qmd#colour-default) |
+
+### Sample {#sample}
+
+| Function | What it does | Read more |
+|:---|:---|:---|
+| `sample_dt()` | Sample rows, or sample whole groups and return every row of each, with colour-coded group display | [Grouped sampling](display.qmd#grouped-sampling) |
+| `cdt()` | Colour-coded display of a whole table, optionally grouped, without sampling | [`cdt()`](display.qmd#cdt) |
+
+### Spot {#spot}
+
+| Function | What it does | Read more |
+|:---|:---|:---|
+| `highlight_dt()` | Colour the rows that match a condition when the table prints | [Highlighting](display.qmd#highlight) |
+| `dupe_dt()` | Every row that belongs to a duplicate cluster, grouped for printing | [Find problems](checks.qmd#problems) |
+| `outlier_dt()` | Rows with an outlier in any numeric column, by IQR or z-score, and which column triggered it | [Find problems](checks.qmd#problems) |
+
+### Profile {#profile}
+
+| Function | What it does | Read more |
+|:---|:---|:---|
+| `schema_dt()` | One row per column: class, distinct values, `NA` count | [Profile](checks.qmd#profile) |
+| `na_dt()` | `NA` count and proportion per column | [Profile](checks.qmd#profile) |
+| `freq_dt()` | The most frequent values of one column, with counts and proportions | [Profile](checks.qmd#profile) |
+| `spark_dt()` | A text sparkline of a numeric column's distribution, with min, median and max | [Profile](checks.qmd#profile) |
+| `key_dt()` | Minimal column combinations that identify every row uniquely | [`key_dt()`](checks.qmd#key-dt) |
+
+### Columns {#columns}
+
+| Function | What it does | Read more |
+|:---|:---|:---|
+| `e()` | Select columns inside `j` from an expression that gives names, positions or a logical vector | [`e()`](checks.qmd#e) |
+| `rename_dt()` | Rename columns by reference from a named vector of `new = "old"` | [Columns](checks.qmd#columns) |
+| `set_null()` | Remove columns by reference | [Columns](checks.qmd#columns) |
+
+### Share {#share}
+
+| Function | What it does | Read more |
+|:---|:---|:---|
+| `md_dt()` | Print a table as a markdown pipe table | [Share results](checks.qmd#share) |
+| `copy_dt()` | Copy that markdown table to the clipboard | [Share results](checks.qmd#share) |
+
+## dbdt: data.table syntax on DuckDB and SQL Server
+
+### Connect {#connect}
+
+| Function | What it does | Read more |
+|:---|:---|:---|
+| `dbdt_connect()` | Open a DuckDB database, in memory or from a file, and summarise it | [Connect](duckdt-connect.qmd#connect) |
+| `dbdt_disconnect()` | Close a connection, shutting the database down | [Connect](duckdt-connect.qmd#connect) |
+| `dbdt_example()` | A small in-memory database of a toy shop, with keys declared, to try things on | [Example database](duckdt-connect.qmd#example) |
+
+### Load {#load}
+
+| Function | What it does | Read more |
+|:---|:---|:---|
+| `as.dbdt()` | Push a `data.frame` into DuckDB as a handle: a zero-copy view, or a table with `copy = TRUE` | [From R](duckdt-connect.qmd#as-duckdt) |
+| `dbdt()` | Wrap a table or view that already exists in the database | [Existing table](duckdt-connect.qmd#duckdt) |
+| `dbdt_csv()` | A lazy view over CSV file(s) | [From files](duckdt-connect.qmd#files) |
+| `dbdt_parquet()` | A lazy view over Parquet file(s) | [From files](duckdt-connect.qmd#files) |
+
+### Query {#query}
+
+| Function | What it does | Read more |
+|:---|:---|:---|
+| `dbdt_sample()` | Sample `n` rows in the database | [Peeking and sampling](duckdt-query.qmd#peeking) |
+
+The query itself is `d[i, j, by]`, with `head()` and `tail()` for peeking; see [methods on handles](#methods).
+
+### Join & write {#join-write}
+
+| Function | What it does | Read more |
+|:---|:---|:---|
+| `dbdt_join()` | Join two tables in the database and return the result. `merge()` on a handle calls it. | [Joining](duckdt-join-write.qmd#join) |
+| `dbdt_merge()` | Update, insert and optionally delete rows of a table from a subset, in place | [Merging](duckdt-join-write.qmd#merge) |
+| `dbdt_temp()` | Run an `[i, j, by]` query into a temporary table and return a handle | [Temporary tables](duckdt-join-write.qmd#temp) |
+| `dbdt_drop()` | Drop a table made by `dbdt_temp()` | [Temporary tables](duckdt-join-write.qmd#temp) |
+
+`:=` inside `d[...]` adds or changes a column in place; see [Writing](duckdt-join-write.qmd#write).
+
+### Explore {#explore}
+
+| Function | What it does | Read more |
+|:---|:---|:---|
+| `dbdt_tables()` | Every table and view | [Look around](duckdt-explore.qmd#look-around) |
+| `dbdt_schema()` | Every column, its type, and whether it is in a primary key | [Look around](duckdt-explore.qmd#look-around) |
+| `dbdt_relationships()` | Declared foreign keys | [Look around](duckdt-explore.qmd#look-around) |
+| `dbdt_erd()` | Write and open an interactive ER diagram that builds the query for the tables and columns you tick | [ER diagram](duckdt-explore.qmd#erd) |
+| `dbdt_explorer()` | The same as a Shiny app, with a preview of the rows | [Shiny](duckdt-explore.qmd#explorer) |
+
+### Model {#model}
+
+| Function | What it does | Read more |
+|:---|:---|:---|
+| `dbdt_data_model()` | Build a model of tables, columns, keys and references from a connection, a handle, or data frames | [Data model](duckdt-explore.qmd#data-model) |
+| `is_dbdt_data_model()` | Test whether an object is a data model | [Data model](duckdt-explore.qmd#data-model) |
+| `dbdt_dm_set_key()` | Mark columns as a table's primary key | [References](duckdt-explore.qmd#references) |
+| `dbdt_dm_add_references()` | Add references written as `table$column == other$column` | [References](duckdt-explore.qmd#references) |
+| `dbdt_dm_add_reference()` | Add one reference from plain strings | [References](duckdt-explore.qmd#references) |
+| `dbdt_dm_infer_references()` | Guess references from column names | [References](duckdt-explore.qmd#references) |
+| `dbdt_dm_set_segment()` | Group tables into labelled clusters | [Shape the model](duckdt-explore.qmd#shape) |
+| `dbdt_dm_set_display()` | Pick a colour palette per table, or hide it | [Shape the model](duckdt-explore.qmd#shape) |
+| `dbdt_dm_filter()` | Zoom in on some tables, and what they connect to | [Shape the model](duckdt-explore.qmd#shape) |
+| `dbdt_dm_query()` | Write the `SELECT` and joins for a set of tables and columns | [Build the query](duckdt-explore.qmd#query) |
+
+### Draw {#draw}
+
+| Function | What it does | Read more |
+|:---|:---|:---|
+| `dbdt_dm_mermaid()` | Mermaid `erDiagram` source | [Draw it](duckdt-explore.qmd#draw) |
+| `dbdt_dm_dot()` | Graphviz DOT source | [Draw it](duckdt-explore.qmd#draw) |
+| `dbdt_dm_render()` | A `DiagrammeR` widget for Quarto, R Markdown and Shiny | [Draw it](duckdt-explore.qmd#draw) |
+| `dbdt_dm_export()` | Write the diagram to SVG, PNG, PDF or PostScript | [Draw it](duckdt-explore.qmd#draw) |
+| `dbdt_dm_palette()` | One colour palette | [Colour schemes](duckdt-explore.qmd#colours) |
+| `dbdt_dm_color_scheme()` | A scheme: a named list of palettes | [Colour schemes](duckdt-explore.qmd#colours) |
+| `dbdt_dm_add_colors()` | Add palettes to the scheme in use | [Colour schemes](duckdt-explore.qmd#colours) |
+| `dbdt_dm_get_color_scheme()` | The scheme in use | [Colour schemes](duckdt-explore.qmd#colours) |
+| `dbdt_dm_set_color_scheme()` | Replace the scheme in use | [Colour schemes](duckdt-explore.qmd#colours) |
+
+## Methods on `"duckdt"` handles {#methods}
+
+These are S3 methods, so they are not exported functions of their own. Their help pages are the topics in the last column.
+
+| Call | What it does | Help |
+|:---|:---|:---|
+| `d[i, j, by]` | Translate to SQL, run in DuckDB, return a `data.table`. `j` may be `:=` to write. | `?"[.duckdt"` |
+| `head(d, n)`, `tail(d, n)` | First and last rows | `?"duckdt-head-tail"` |
+| `merge(x, y, ...)` | Calls `dbdt_join()` | `?dbdt_join` |
+| `as.data.table(d)` | The whole table into R | `?as.data.table.duckdt` |
+| `print(d)`, `dim(d)`, `nrow(d)`, `ncol(d)`, `names(d)`, `colnames(d)` | Describe the handle | |
+
+## Options {#options}
+
+| Option | Default | Effect |
+|:---|:---|:---|
+| `duckdt.quiet` | unset | Set to `TRUE` **before** attaching the package to hide the startup banner. It also silences the one-off note about binary columns being left out of a table's results. |
+| `duckdt.dm_scheme` | the built-in scheme | The colour scheme for data model diagrams. Set by `dbdt_dm_set_color_scheme()` and `dbdt_dm_add_colors()`. |
+| `duckdt.mermaid_src` | Mermaid 11 from the jsDelivr CDN | Where the `dbdt_erd()` page loads Mermaid from. Point it at a local copy or an intranet URL to draw diagrams without internet access. |
+| `foam.sample_dt.color` | `TRUE` | The session default for `color` in `sample_dt()`, `cdt()` and `dupe_dt()`. Set it with `switch_col()`. The name is a legacy of the package's earlier name. |
+| `datatable.print.*` | `data.table`'s own | The print mask reads `datatable.print.topn`, `nrows`, `class`, `rownames`, `colnames`, `keys` and `trunc.cols`, and `datatable.show.indices`. |

@@ -24,7 +24,7 @@
 #'   writable). If `FALSE` (default), register `x` as a zero-copy view
 #'   (read-only).
 #'
-#' @return A `"duckdt"` object, writable immediately (unlike [duckdt()]'s
+#' @return A `"duckdt"` object, writable immediately (unlike [dbdt()]'s
 #'   read-only-by-default handles -- you just created this table, so there's
 #'   nothing accidental about writing to it).
 #' @export
@@ -73,7 +73,7 @@ as.duckdt <- function(x, conn = NULL, name = NULL, overwrite = FALSE, copy = FAL
 #' Pull a duckdt handle fully into a data.table
 #'
 #' Runs `SELECT * FROM <table>` and materializes the result in R. This is
-#' the counterpart to [as.duckdt()].
+#' the counterpart to [as.dbdt()].
 #'
 #' Binary columns (`BLOB`/`BIT` on DuckDB, `varbinary`/`binary`/`image` on
 #' MS SQL Server) are left out: no driver hands them back as an R vector, and

@@ -1,0 +1,89 @@
+---
+title: "Limitations"
+description: "What is deliberately left out, what does not work yet, and the sharp edges to know about."
+---
+
+```{r}
+#| include: false
+source("_setup.R")
+```
+
+This page collects what is missing, what behaves differently from what you might expect, and why some of it is the way it is. Where a topic has a fuller explanation elsewhere, the entry links to it.
+
+## By design
+
+### Every `[` runs immediately {#eager}
+
+`d[i, j, by]` issues one query and returns a `data.table`. That is deliberate: it keeps the mental model identical to plain `data.table`. A lazy mode, building up a query across several `[` calls before touching R in the manner of `dtplyr::lazy_dt()`, would be a natural next step if it turns out to matter for your workloads.
+
+In the meantime [`dbdt_temp()`](duckdt-join-write.qmd#temp) covers the case that actually bites, a subset you want to feed to another database-side operation, by materialising it into a temporary table rather than into R.
+
+### Database tables have no row order {#order}
+
+DuckDB tables are unordered without an explicit `ORDER BY`. So `order()` inside `i` and row positions such as `d[1:5]` are not supported, `tail()` reflects DuckDB's current scan order, and no query has a guaranteed row order. Sort the returned `data.table`. [Details](duckdt-query.qmd#ordering).
+
+## Not supported yet
+
+- Lazy, chained query building (above).
+- Row-position indexing and `order()` in `i`.
+- Grouped `:=`, that is `by =` together with a write.
+- `dbdt_sample(x, n, replace = TRUE)`. DuckDB's sampling clause has no replacement option.
+- `na.rm`, and R functions with no DuckDB equivalent such as `ifelse()` and `as.Date()`, inside a query. [Details](duckdt-query.qmd#functions).
+- A bare function call in `j`: write `.(m = mean(x))`, not `mean(x)`.
+- Zero-copy `as.dbdt()`, `dbdt_csv()`, `dbdt_parquet()` and list-columns against SQL Server. [Details](duckdt-mssql.qmd).
+
+## Writes {#writes}
+
+- **`:=` rebuilds the table.** Primary keys and `NOT NULL` constraints are dropped, and it cannot run on a table that another table references. [Details](duckdt-join-write.qmd#write).
+- **Multi-column `:=` is not atomic.** Each assigned column is written in its own step, so if a later expression fails, the earlier columns stay written.
+- **Do not re-wrap a temporary table.** `dbdt(con, "<temp table name>", writable = TRUE)` loses the table's temporary status, so a `:=` through it can create a permanent table of the same name while reads keep returning the temporary one. Keep using the handle `dbdt_temp()` gave you.
+- **Staging tables use reserved names.** `dbdt_merge()` stages its subset in a temporary table called `<table>__duckdt_merge_tmp`, and on SQL Server `:=` rebuilds through `<table>__duckdt_tmp`. Each is replaced, and dropped afterwards, without a check, so a table of your own with such a name would be lost: a temporary one on DuckDB, an ordinary one on SQL Server. Do not name your own tables that way.
+- **`:=` prints the handle.** It returns the handle, so the console prints it after each assignment.
+
+## Missing values {#na-keys}
+
+- **Missing keys never match in a database join or merge.** `dbdt_join()` and `dbdt_merge()` compare keys with SQL's `=`, so two `NA` keys do not match, where base `merge()` and `data.table` would match them:
+
+```{r}
+con <- dbdt_example(quiet = TRUE)
+
+a <- as.dbdt(data.table(k = c(1L, NA), a = c("x", "y")), conn = con, name = "left_side", copy = TRUE)
+b <- data.table(k = c(1L, NA), b = c("p", "q"))
+
+dbdt_join(a, b, by = "k")
+```
+
+```{r}
+merge(data.table(k = c(1L, NA), a = c("x", "y")), b, by = "k")
+```
+
+Consequently a `dbdt_merge()` upsert whose key is missing inserts instead of updating. Drop or fill missing keys first.
+
+- **`na.rm` is not translated.** SQL aggregates already skip `NULL`, so leave it out. [Details](duckdt-query.qmd#na).
+
+## Display {#display-limits}
+
+### `group_value_mode = "similarity"` {#colour-mode}
+
+`enable_dt_print_thousands(group_value_mode = "similarity")` is meant to give near-identical strings in grouped output one shared colour, so typos stand out. A mode stored on a table wins over the session setting, and `sample_dt()`, `cdt()` and `dupe_dt()` store `"distinct"` on the tables they return. So the session-wide `"similarity"` setting has no visible effect on the output of those three functions. The colouring described in [Colour modes](display.qmd#colour-modes) is what they produce.
+
+### `e()` ignores the row filter {#e-filter}
+
+`e()` rebuilds the columns from the whole table, so `dt[x == 1, e(c("x", "y"))]` returns every row. Use `dt[x == 1, .SD, .SDcols = c("x", "y")]` instead. [Details](checks.qmd#e).
+
+### The print mask truncates at 11 rows {#print-truncation}
+
+With the print mask on, a table of more than 11 rows shows its first and last five rows, where plain `data.table` shows up to 100. Raise `topn` to see more. [Details](display.qmd#print-mask).
+
+### The masks live in the global environment {#global-masks}
+
+`enable_dt_print_thousands()`, `enable_dt_str_mask()` and `enable_dt_dput_mask()` define `print.data.table`, `str` and `dput` in the global environment. Anything you had defined under those names there is replaced, and the `disable_*()` functions remove whatever is defined without restoring it. [Details](getting-started.qmd#attaching-the-package).
+
+## SQL Server {#sql-server}
+
+SQL Server support is tested against emitted SQL and not a live server, and a few translations are known to be shaky: `median()` needs an `OVER` clause that is not yet generated, and `REGEXP_LIKE()` needs SQL Server 2025. [Details](duckdt-mssql.qmd).
+
+```{r}
+#| include: false
+dbdt_disconnect(con)
+```

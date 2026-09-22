@@ -19,9 +19,9 @@
 #' On MS SQL Server it compiles to a single native T-SQL `MERGE` statement.
 #'
 #' @param x A `"duckdt"` object backed by a **materialized, writable** table
-#'   (see [as.duckdt()]'s `copy` argument, and [duckdt()]'s `writable`
-#'   argument) -- `duckdt_merge()` mutates `x` in place, so this can't be a
-#'   read-only view, nor a handle from `duckdt(conn, table)` that hasn't
+#'   (see [as.dbdt()]'s `copy` argument, and [dbdt()]'s `writable`
+#'   argument) -- `dbdt_merge()` mutates `x` in place, so this can't be a
+#'   read-only view, nor a handle from `dbdt(conn, table)` that hasn't
 #'   opted into `writable = TRUE`.
 #' @param y The subset to merge in: a `data.frame`/`data.table`, or another
 #'   `"duckdt"` object (table, view, or query result) on the *same*

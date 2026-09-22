@@ -1,0 +1,193 @@
+---
+title: "Data checks & helpers"
+description: "Profile a table, find duplicates, outliers and candidate keys, and small helpers for columns and sharing results."
+---
+
+```{r}
+#| include: false
+source("_setup.R")
+```
+
+Quick helpers for the first look at a table. Each takes a `data.table` (they stop with a clear message for anything else) and returns a `data.table` or prints a short summary, so the results compose with everything else you do.
+
+The examples use `iris` and `airquality`, which has missing values:
+
+```{r}
+DT <- as.data.table(iris)
+AQ <- as.data.table(airquality)
+```
+
+## Profile a table {#profile}
+
+### `schema_dt()`: one row per column
+
+Class, number of distinct non-missing values, and number of missing values. A quick overview of a wide table.
+
+```{r}
+schema_dt(AQ)
+```
+
+### `na_dt()`: missing values
+
+The count and proportion of `NA`s in each column.
+
+```{r}
+na_dt(AQ)
+```
+
+### `freq_dt()`: the most common values
+
+The top `n` values of one column (default 20), with counts and proportions, most frequent first. The column can be bare or a string; `n = Inf` returns every value.
+
+```{r}
+freq_dt(DT, Species)
+```
+
+```{r}
+freq_dt(AQ, Month, n = 3)
+```
+
+### `spark_dt()`: a distribution at a glance
+
+Buckets a numeric column into equal-width bins and prints a sparkline with the minimum, median and maximum. It is a quick look, not a plot: it only prints text, and the sparkline is also returned invisibly as a string.
+
+```{r}
+spark_dt(DT, Sepal.Length)
+```
+
+```{r}
+spark_dt(AQ, Ozone, bins = 15)
+```
+
+### `key_dt()`: find candidate keys {#key-dt}
+
+Looks for the smallest sets of columns that identify every row uniquely, which is what you want to know before a join. It reports *minimal* candidates: a combination is skipped if a smaller one already works. `cols` limits which columns are tried and `max_size` (default 3) how many are combined. The search grows combinatorially, so raise `max_size` carefully on wide tables.
+
+```{r}
+orders <- data.table(
+  customer = c("a", "a", "b", "b", "c"),
+  day      = as.Date("2024-03-01") + c(0, 1, 0, 0, 2),
+  item     = c("x", "y", "x", "z", "x"),
+  qty      = c(1, 2, 1, 5, 3)
+)
+key_dt(orders)
+```
+
+Candidates come from the data alone, so a coincidence can qualify, as `customer, qty` does here. Which one is meaningful is your call.
+
+## Find problems {#problems}
+
+### `dupe_dt()`: duplicate rows
+
+Returns every row that belongs to a duplicate cluster (two or more rows sharing values across `by`, all columns by default), ordered by cluster and printed with group separators the way [`cdt()`](display.qmd#cdt) does. A `.dupe_group` column numbers the clusters. If nothing is duplicated you get a zero-row table.
+
+```{r}
+d <- data.table(
+  id   = c(1, 1, 2, 3, 3, 3),
+  name = c("a", "a", "b", "c", "d", "c")
+)
+dupe_dt(d)
+```
+
+Across all columns, row 5 (`3, d`) is not a duplicate. Matching on `id` alone makes it one:
+
+```{r}
+dupe_dt(d, by = "id")
+```
+
+### `outlier_dt()`: unusual values
+
+Returns the rows where any of `cols` (all numeric columns by default) is an outlier, plus an `outlier_cols` column naming which column or columns triggered it.
+
+- `method = "iqr"` (the default) flags values more than `threshold` times the interquartile range beyond the quartiles. `threshold` defaults to 1.5.
+- `method = "zscore"` flags values whose absolute z-score exceeds `threshold`, which defaults to 3.
+
+```{r}
+outlier_dt(DT)
+```
+
+```{r}
+outlier_dt(DT, cols = "Sepal.Width", method = "zscore", threshold = 2.5)
+```
+
+## Columns {#columns}
+
+### `rename_dt()`: rename by reference
+
+`renames` is a named character vector of `new_name = "old_name"`. The table is changed in place.
+
+```{r}
+DT2 <- copy(DT)
+rename_dt(DT2, c(sepal_len = "Sepal.Length", sepal_wid = "Sepal.Width"))
+names(DT2)
+```
+
+### `set_null()`: drop columns by reference
+
+A shorthand for `set(x, j = cols, value = NULL)`.
+
+```{r}
+set_null(DT2, c("Petal.Length", "Petal.Width"))
+names(DT2)
+```
+
+### `e()`: choose columns with an expression {#e}
+
+Inside `j`, `e()` evaluates an expression that produces column names (or positions, or a logical vector) and returns those columns. It is handy for selecting columns by pattern.
+
+```{r}
+DT[, e(grep("Sepal", names(DT), value = TRUE))][1:3]
+```
+
+```{r}
+DT[, e(grep("Sepal", names(DT), value = TRUE, invert = TRUE))][1:3]
+```
+
+```{r}
+DT[, e(1:2)][1:3]
+```
+
+::: {.callout-warning}
+## `e()` ignores the row filter in `i`
+`e()` looks the table up by name and rebuilds the columns from the whole table, so a filter in `i` is not applied. To select columns *and* rows, use `.SD` with `.SDcols`.
+
+```{r}
+dt <- data.table(x = 1:3, y = 4:6)
+dt[x == 1, e(c("x", "y"))]
+```
+
+```{r}
+dt[x == 1, .SD, .SDcols = c("x", "y")]
+```
+:::
+
+## Share results {#share}
+
+### `md_dt()`: a markdown table
+
+Prints a GitHub-flavoured pipe table for pasting into docs, pull requests and issues. `n` limits the rows and the text is also returned invisibly.
+
+```{r}
+md_dt(DT[1:4])
+```
+
+Which renders as:
+
+```{r}
+#| results: asis
+md_dt(DT[1:4])
+```
+
+### `copy_dt()`: straight to the clipboard
+
+Renders the same markdown table and copies it. It works out of the box on Windows and macOS; on Linux it needs `xclip` or `xsel`.
+
+```r
+copy_dt(DT[1:4])
+```
+
+`clip_fun` replaces the clipboard writer with any function that takes the text, which is also how to try it without touching your clipboard:
+
+```{r}
+copy_dt(DT[1:4], clip_fun = function(txt) cat("would copy", nchar(txt), "characters\n"))
+```

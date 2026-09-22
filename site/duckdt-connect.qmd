@@ -1,0 +1,218 @@
+---
+title: "Connect & load data"
+description: "Open a DuckDB database, and bring in data from R, from files, or from tables that already exist."
+---
+
+```{r}
+#| include: false
+source("_setup.R")
+# The file-based examples below write to the working directory; keep that in a scratch folder.
+knitr::opts_knit$set(root.dir = tempdir())
+```
+
+`dbdt()` lets you write `data.table`'s `d[i, j, by]` against a database. The steps are always the same: connect, get a *handle* on some data, query it. This page covers the first two; [Query](duckdt-query.qmd) covers the third.
+
+## How it fits together
+
+```{mermaid}
+%%| echo: false
+%%| fig-width: 9
+flowchart LR
+  A["Your R code<br/>d[state == 'WA', .N, by = locality]"] --> B["duckdt<br/>translates to SQL"]
+  B --> C["DuckDB<br/>does the work"]
+  C --> D["A data.table<br/>just the answer"]
+  E[(".duckdb file<br/>.parquet / .csv")] --- C
+```
+
+A `duckdt` handle is a pointer: *this connection, that table*. No data is copied and none is loaded into R. Every `[` sends one SQL query to DuckDB and returns the result as an ordinary `data.table`, so the rest of your R code does not change.
+
+## Connect {#connect}
+
+`dbdt_connect()` opens a DuckDB database. With no arguments it is an in-memory scratch database that disappears when you disconnect.
+
+```{r}
+con <- dbdt_connect()
+```
+
+The summary says what you just opened and gives the two calls that get you moving. Arguments:
+
+| Argument | Default | Effect |
+|:---|:---|:---|
+| `dbdir` | `":memory:"` | Path to a database file. A file that does not exist yet is created. Forward slashes (`"C:/data/warehouse.duckdb"`) work on Windows. |
+| `read_only` | `FALSE` | Open the file read-only. Good for a database you only mean to look at, and required if another process has it open. |
+| `quiet` | `FALSE` | Skip the summary. |
+| `...` | | Passed to `duckdb::duckdb()`. |
+
+`dbdt_connect()` is a thin wrapper over `DBI::dbConnect(duckdb::duckdb(dbdir = ...))`. Every function in the package takes a plain DBI connection, so opening one yourself is equally fine.
+
+Close it when you are done. This also shuts the database down, which flushes a file-backed database cleanly:
+
+```{r}
+dbdt_disconnect(con)
+```
+
+## An example database {#example}
+
+`dbdt_example()` builds a small in-memory database of a toy shop, with real primary and foreign keys declared. The docs use it throughout.
+
+```{r}
+con <- dbdt_example()
+dbdt_tables(con)
+```
+
+`customers`, `items`, `orders` and `order_lines`; `order_lines` has a compound primary key and points at both `orders` and `items`. `dbdt_tables()` and its relatives are covered in [Explore a database](duckdt-explore.qmd).
+
+## Getting data in {#getting-data-in}
+
+```{mermaid}
+%%| echo: false
+%%| fig-width: 9
+flowchart TD
+  A["What have you got?"] --> B["A data.frame<br/>in R"]
+  A --> C["A .csv or .parquet<br/>file"]
+  A --> D["A table already<br/>in the database"]
+  B --> B1["as.dbdt(x)<br/>zero-copy view"]
+  B --> B2["as.dbdt(x, copy = TRUE)<br/>written into DuckDB"]
+  C --> C1["dbdt_csv(path)<br/>dbdt_parquet(path)"]
+  D --> D1["dbdt(con, 'name')"]
+```
+
+### From R: `as.dbdt()` {#as-duckdt}
+
+By default this is **zero-copy**: the R object is registered as a virtual view inside DuckDB, with nothing serialised. The handle is read from R's memory when you query it.
+
+```{r}
+d <- as.dbdt(mtcars, conn = con)
+d
+```
+
+Pass `copy = TRUE` to physically write the data into a DuckDB table instead. You need this for a table you want to change with `:=` or [`dbdt_merge()`](duckdt-join-write.qmd), and for anything that must survive the session.
+
+```{r}
+d <- as.dbdt(mtcars, conn = con, name = "mtcars_tbl", copy = TRUE)
+d
+```
+
+Other arguments: `name` (the table or view name in DuckDB, defaulting to the object's name), `overwrite = TRUE` to replace one that exists, and `conn`. With no `conn` a new in-memory database is created for you.
+
+::: {.callout-note}
+## Row names are not carried over
+`mtcars` keeps its car names in the row names, and DuckDB has no row names, so they are dropped. Put them in a column first, so they exist in the table:
+
+```{r}
+cars <- data.table(car = rownames(mtcars), mtcars)
+d <- as.dbdt(cars, conn = con, copy = TRUE)
+names(d)[1:4]
+```
+:::
+
+#### List-columns
+
+Against DuckDB, R list-columns round-trip through DuckDB's native `LIST` type, both zero-copy and with `copy = TRUE`, and come back as a list-column with no extra steps:
+
+```{r}
+x <- data.table(id = 1:2, tags = list(c("a", "b"), "c"))
+dl <- as.dbdt(x, conn = con, name = "with_tags", copy = TRUE)
+as.data.table(dl)$tags
+```
+
+As with DuckDB's `LIST` type, every element of one list-column must coerce to a single atomic type, so a column that mixes an integer-vector cell with a character-vector cell cannot be represented. List-columns are not supported on SQL Server.
+
+### From files: `dbdt_csv()` and `dbdt_parquet()` {#files}
+
+These create a lazy view over one or more files. The file is not read into R, and DuckDB reads only what a query needs, out of core, so this works on files bigger than memory.
+
+```{r}
+fwrite(iris, "iris.csv")
+v <- dbdt_csv("iris.csv", conn = con)
+v
+```
+
+`path` can be several files, and Parquet paths can use wildcards, such as `dbdt_parquet("data/*.parquet")`. The view is named after the file unless you give `name`; here that would be `customers`, which is already a table in this database (DuckDB will not replace a table with a view), so the name is given explicitly.
+
+```{r}
+#| output: false
+DBI::dbExecute(con, "COPY customers TO 'customers.parquet' (FORMAT PARQUET)")
+```
+
+```{r}
+p <- dbdt_parquet("customers.parquet", conn = con, name = "customers_pq")
+p
+```
+
+Both are DuckDB-only (they use DuckDB's `read_csv_auto` and `read_parquet`), and a file-backed view is read-only.
+
+### A table that already exists: `dbdt()` {#duckdt}
+
+`dbdt(conn, table)` wraps a table or view that is already in the database. Nothing is copied.
+
+```{r}
+d <- dbdt(con, "customers")
+d
+```
+
+`nrow()`, `ncol()`, `dim()` and `names()` work on a handle and run tiny queries. Handles made this way are **read-only by default**, which the print flags: `:=` and `dbdt_merge()` refuse to run against them until you opt in with `dbdt(con, "customers", writable = TRUE)`. The point is to stop you changing a table you only meant to look at, for example after reconnecting to a file.
+
+### Reading a handle {#status}
+
+What a handle's first line tells you:
+
+| Print shows | What it is | `:=` and `dbdt_merge()` |
+|:---|:---|:---|
+| `<duckdt> t [3 x 3]` | A real table, opened writable (`as.dbdt(copy = TRUE)` or `writable = TRUE`) | Allowed |
+| `... (read-only)` | A real table wrapped with `dbdt()` | Refused until `writable = TRUE` |
+| `... (view)` | A view: zero-copy `as.dbdt()`, `dbdt_csv()`, `dbdt_parquet()` | Never; views cannot be written |
+| `... (temp)` | A temporary table from [`dbdt_temp()`](duckdt-join-write.qmd#temp) | Allowed, on the temporary copy |
+
+## A database that outlives the session {#persist}
+
+By default `duckdt` is in-memory. To keep data, connect to a file and write with `copy = TRUE`. This is the whole round trip, from a `data.table` in memory to a file, and back in a later session:
+
+```{r}
+sales <- data.table(
+  order_id = 1:5,
+  customer = c("Alice", "Bob", "Alice", "Carol", "Bob"),
+  amount   = c(120.50, 89.00, 45.25, 300.00, 15.75)
+)
+
+# Session 1: write it to a file.
+file_con <- dbdt_connect("sales.duckdb")
+as.dbdt(sales, conn = file_con, name = "sales", copy = TRUE)
+dbdt_disconnect(file_con)
+```
+
+```{r}
+# Session 2 (or later): open the same file and pick up where you left off.
+file_con <- dbdt_connect("sales.duckdb")
+dbdt_tables(file_con)
+```
+
+```{r}
+d <- dbdt(file_con, "sales")
+d[, .(total = sum(amount), n = .N), by = customer][order(customer)]
+```
+
+`copy = TRUE` is what makes the table persistent; the zero-copy default is a view over your R object and disappears with the session. Use `overwrite = TRUE` if you re-run the write against a file that already has the table. The handle from `dbdt()` is read-only by default, as above; to write back, reopen it with `writable = TRUE` (see [Join, write & merge](duckdt-join-write.qmd#write)).
+
+```{r}
+dbdt_disconnect(file_con)
+```
+
+Always disconnect from a file-backed database: shutting it down flushes DuckDB's write-ahead log and closes the file cleanly. `dbdt_disconnect(con)` does this; so does `DBI::dbDisconnect(con, shutdown = TRUE)`.
+
+## Getting data out {#getting-data-out}
+
+Every `[` already returns a `data.table`. To pull an entire table into R:
+
+```{r}
+as.data.table(dbdt(con, "items"))
+```
+
+That is `SELECT *` materialised in R, so use it on tables that fit. For a large table, [query it](duckdt-query.qmd) instead, or peek with `head()`, `tail()` and `dbdt_sample()`.
+
+Binary columns (`BLOB` and `BIT` on DuckDB) cannot be converted to R and are left out of these results, with a note; see [Query](duckdt-query.qmd#binary).
+
+```{r}
+#| include: false
+dbdt_disconnect(con)
+```

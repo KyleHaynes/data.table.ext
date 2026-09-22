@@ -4,32 +4,32 @@
 #' exactly the same query, but leaves the result in the database as a
 #' temporary table and hands back a `"duckdt"` handle over it. Nothing
 #' crosses into R, so the subset stays available to anything that takes a
-#' handle: [duckdt_join()], [duckdt_merge()], another `duckdt_temp()`, or
+#' handle: [dbdt_join()], [dbdt_merge()], another `dbdt_temp()`, or
 #' plain `[` when you finally do want the rows.
 #'
 #' On DuckDB the result is a genuine `TEMP` table: it lives in the session's
 #' `temp` schema and disappears when the connection closes. On MS SQL Server
 #' it is created with `SELECT ... INTO` as an ordinary table on the current
-#' schema (matching how [duckdt_merge()] stages there), so it outlives the
-#' session -- call [duckdt_drop()] when you are done with it.
+#' schema (matching how [dbdt_merge()] stages there), so it outlives the
+#' session -- call [dbdt_drop()] when you are done with it.
 #'
-#' The handle is materialized and writable, so `:=` and [duckdt_merge()] both
+#' The handle is materialized and writable, so `:=` and [dbdt_merge()] both
 #' work against it. Writes land on the temporary copy and leave `x`'s table
 #' untouched.
 #'
 #' @param x A `"duckdt"` object.
 #' @param i,j,by As in `[.duckdt` -- row filter, column selection/computation,
-#'   and grouping. All optional; `duckdt_temp(x)` copies the whole table.
+#'   and grouping. All optional; `dbdt_temp(x)` copies the whole table.
 #' @param name Name for the temporary table. Defaults to a generated name
 #'   unique within the session.
 #'
 #' @return A `"duckdt"` object over the temporary table.
-#' @seealso [duckdt_drop()] to drop it, [duckdt_join()] to join it.
+#' @seealso [dbdt_drop()] to drop it, [dbdt_join()] to join it.
 #' @examples
-#' d <- as.duckdt(datasets::mtcars)
-#' sixes <- duckdt_temp(d, cyl == 6)
+#' d <- as.dbdt(datasets::mtcars)
+#' sixes <- dbdt_temp(d, cyl == 6)
 #' nrow(sixes)
-#' duckdt_drop(sixes)
+#' dbdt_drop(sixes)
 #' @export
 duckdt_temp <- function(x, i, j, by, name = NULL) {
   if (!inherits(x, "duckdt")) {
@@ -57,7 +57,7 @@ duckdt_temp <- function(x, i, j, by, name = NULL) {
   duckdt_temp_handle(x$conn, name)
 }
 
-#' Drop a table created by duckdt_temp()
+#' Drop a table created by dbdt_temp()
 #'
 #' Temporary tables are yours to manage: DuckDB drops them when the
 #' connection closes, but a long-lived session that builds many subsets will
@@ -65,10 +65,10 @@ duckdt_temp <- function(x, i, j, by, name = NULL) {
 #' that persist). This drops one.
 #'
 #' As a guard against dropping real data, this refuses handles that
-#' [duckdt_temp()] did not create unless you pass `force = TRUE`.
+#' [dbdt_temp()] did not create unless you pass `force = TRUE`.
 #'
-#' @param x A `"duckdt"` object from [duckdt_temp()].
-#' @param force Drop the table even if `x` is not a `duckdt_temp()` handle?
+#' @param x A `"duckdt"` object from [dbdt_temp()].
+#' @param force Drop the table even if `x` is not a `dbdt_temp()` handle?
 #'   Default `FALSE`. This deletes a real table -- there is no undo.
 #'
 #' @return `NULL`, invisibly.

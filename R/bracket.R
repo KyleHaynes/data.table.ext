@@ -5,11 +5,11 @@
 #' result as a `data.table`. `j` may also be a `:=` call, in which case the
 #' underlying DuckDB table is mutated instead (see the write-path notes in
 #' the package README); this requires a materialized, writable table (see
-#' [as.duckdt()]'s `copy` argument and [duckdt()]'s `writable` argument).
+#' [as.dbdt()]'s `copy` argument and [dbdt()]'s `writable` argument).
 #'
 #' Because this returns a `data.table`, the result has left the database --
 #' it can no longer be used where a `"duckdt"` handle is expected (e.g. as an
-#' argument to [duckdt_join()] or [duckdt_merge()]). Use [duckdt_temp()] to
+#' argument to [dbdt_join()] or [dbdt_merge()]). Use [dbdt_temp()] to
 #' run the same `i`/`j`/`by` query into a temporary table and get a handle
 #' back instead, keeping the rows in DuckDB.
 #'
@@ -18,8 +18,8 @@
 #' as an R vector, and asking for one fails the whole query rather than just
 #' that column, so a single binary column would otherwise make the table
 #' unreadable. Naming one in `j` (`d[, .(payload)]`) still selects it, and
-#' nothing that stays in the database -- `:=`, [duckdt_temp()],
-#' [duckdt_merge()] -- is affected.
+#' nothing that stays in the database -- `:=`, [dbdt_temp()],
+#' [dbdt_merge()] -- is affected.
 #'
 #' @param x A `"duckdt"` object.
 #' @param i Optional row filter, e.g. `cyl == 6`.

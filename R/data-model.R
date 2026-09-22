@@ -4,16 +4,16 @@
 #' columns, and the references between them -- the same idea (and largely the
 #' same shape) as the object used by the
 #' [datamodelr](https://github.com/bergant/datamodelr) package, which this is
-#' a port of. It is the thing [duckdt_erd()], [duckdt_dm_mermaid()],
-#' [duckdt_dm_dot()] and [duckdt_explorer()] all draw.
+#' a port of. It is the thing [dbdt_erd()], [dbdt_dm_mermaid()],
+#' [dbdt_dm_dot()] and [dbdt_explorer()] all draw.
 #'
-#' Reverse-engineering a live connection uses [duckdt_tables()],
-#' [duckdt_schema()] and [duckdt_relationships()], so it works against both
+#' Reverse-engineering a live connection uses [dbdt_tables()],
+#' [dbdt_schema()] and [dbdt_relationships()], so it works against both
 #' DuckDB and MS SQL Server. Only foreign keys the database actually declares
 #' as constraints are picked up; DuckDB databases built from CSV/Parquet
-#' loads usually declare none, so see [duckdt_dm_infer_references()] (or
+#' loads usually declare none, so see [dbdt_dm_infer_references()] (or
 #' `infer_references = TRUE`) to guess them from column names, and
-#' [duckdt_dm_add_references()] to state them by hand.
+#' [dbdt_dm_add_references()] to state them by hand.
 #'
 #' @param x A `DBI` connection, a `"duckdt"` object, a named list of data
 #'   frames, or a column-info `data.frame` (with at least `table` and
@@ -21,7 +21,7 @@
 #' @param tables Optionally, a character vector restricting the model to
 #'   these tables. Matched against the bare table name or `"schema.name"`.
 #' @param infer_references Also guess references from column naming
-#'   conventions, via [duckdt_dm_infer_references()]. Default `FALSE`.
+#'   conventions, via [dbdt_dm_infer_references()]. Default `FALSE`.
 #' @param row_counts Run a `SELECT count(*)` per table and record it on the
 #'   model. Default `FALSE`, since this can be slow on a large or remote
 #'   database; a failure on any single table records `NA` rather than
@@ -43,15 +43,15 @@
 #'       `column`, `ref`, `ref_col`, `ref_id` (rows sharing an id form one
 #'       compound reference) and `ref_col_num`.}
 #'   }
-#' @seealso [duckdt_erd()] to explore one in the browser,
-#'   [duckdt_explorer()] for the Shiny version.
+#' @seealso [dbdt_erd()] to explore one in the browser,
+#'   [dbdt_explorer()] for the Shiny version.
 #' @examples
-#' con <- duckdt_connect(quiet = TRUE)
+#' con <- dbdt_connect(quiet = TRUE)
 #' DBI::dbExecute(con, "CREATE TABLE customers (id INTEGER PRIMARY KEY, name VARCHAR)")
 #' DBI::dbExecute(con, "CREATE TABLE orders (
 #'   id INTEGER PRIMARY KEY, customer_id INTEGER REFERENCES customers(id), total DOUBLE)")
 #'
-#' dm <- duckdt_data_model(con)
+#' dm <- dbdt_data_model(con)
 #' dm
 #' dm$references
 #' DBI::dbDisconnect(con, shutdown = TRUE)

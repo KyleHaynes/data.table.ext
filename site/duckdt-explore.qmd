@@ -1,0 +1,292 @@
+---
+title: "Explore a database"
+description: "Find out what is in a database and how it connects: the schema helpers, the interactive ER diagram, the data model, and the query builder."
+---
+
+```{r}
+#| include: false
+source("_setup.R")
+```
+
+A database you did not build raises four questions: *what tables are there, what columns do they have, how do they connect, and what query gets me the columns I want?* This page goes from the quickest answer to each, to the pieces underneath them.
+
+```{r}
+con <- dbdt_example()
+```
+
+## Look around {#look-around}
+
+Three functions read the database's own catalogue. They use the portable `information_schema` views, so they work on both DuckDB and MS SQL Server, and each accepts a plain `DBI` connection or a `"duckdt"` handle.
+
+```{r}
+dbdt_tables(con)
+```
+
+```{r}
+dbdt_schema(con, table = "orders")
+```
+
+```{r}
+dbdt_relationships(con)
+```
+
+| Function | Returns, one row per... |
+|:---|:---|
+| `dbdt_tables(con)` | table or view: `schema`, `name`, `type` |
+| `dbdt_schema(con, table = NULL)` | column: `schema`, `table`, `column`, `type`, `ordinal_position`, `primary_key`. `table` restricts it to one table. |
+| `dbdt_relationships(con)` | foreign-key column: `fk_schema`, `fk_table`, `fk_column` (the referencing side) and `pk_schema`, `pk_table`, `pk_column` (the referenced side) |
+
+Each returns a plain `data.table`, so it composes with everything else: `dbdt_schema(con)[primary_key == TRUE]` lists every key column, and `dbdt_relationships(con)[pk_table == "orders"]` shows what references `orders`.
+
+Relationships are only reported when the database **declares** them as constraints. Nothing is guessed from column names, and `dbdt_relationships()` returns a zero-row table, rather than an error, when the database or version does not expose the constraint views. [When a database declares none](#references) has the remedy.
+
+## See it: `dbdt_erd()` {#erd}
+
+`dbdt_erd(con)` writes a self-contained HTML page and opens it in your browser: an entity-relationship diagram of every table and how they connect, plus a searchable list of tables and columns.
+
+```r
+dbdt_erd(con)                             # opens the explorer in your browser
+dbdt_erd(con, include_row_counts = TRUE)  # add a count(*) per table (can be slow)
+dbdt_erd(con, tables = c("orders", "customers"), view = "keys_only")
+```
+
+The page is where the "which columns do I actually want" work happens. Tick tables and columns in the sidebar and it redraws the diagram and writes the code that selects exactly those: `dbdt(con, "orders")[, .(order_id, ordered_on)]` for one table, or a `SELECT` with the joins worked out from the schema's foreign keys for several, with a copy button. Here is the page for the toy shop database, live:
+
+```{r}
+#| include: false
+dir.create("assets", showWarnings = FALSE)
+erd <- dbdt_erd(
+  con, open = FALSE, include_row_counts = TRUE,
+  title = "Toy shop", file = "assets/erd-example.html"
+)
+```
+
+```{=html}
+<iframe class="explorer-frame" src="assets/erd-example.html" title="Interactive ER diagram of the toy shop database"></iframe>
+```
+
+It needs no packages beyond `data.table.ext`. The diagram itself is drawn by [Mermaid](https://mermaid.js.org/) loaded from a CDN, so with no internet connection you get the diagram's source instead, and everything else still works.
+
+| Argument | Default | Effect |
+|:---|:---|:---|
+| `x` | | A `DBI` connection, a `"duckdt"` handle, or a data model (see [below](#data-model)) so you can filter or annotate it first |
+| `tables` | all | Only model these tables |
+| `include_row_counts` | `FALSE` | A `count(*)` per table, shown beside it. Can be slow on a large or remote database. |
+| `open` | `TRUE` | Open the page with `browseURL()` |
+| `infer_references` | `FALSE` | Guess undeclared foreign keys from column names ([details](#references)) |
+| `select` | all if there are 12 tables or fewer, otherwise none | Tables to start ticked |
+| `view` | `"all"` | Level of detail: `"all"` columns, `"keys_only"`, or `"title_only"` |
+| `title`, `file` | connection description, a temp file | Page title, and where to write the page |
+
+The value it returns (invisibly) is the path to the page. That path carries the diagram's Mermaid source as its `"mermaid"` attribute and the data model as its `"data_model"` attribute:
+
+```{r}
+cat(attr(erd, "mermaid"))
+```
+
+Drop that straight into a Quarto or R Markdown `mermaid` chunk, or a GitHub comment, and it draws:
+
+```{r}
+#| echo: false
+#| results: asis
+cat("```{mermaid}\n%%| echo: false\n", attr(erd, "mermaid"), "\n```\n", sep = "")
+```
+
+### In Shiny: `dbdt_explorer()` {#explorer}
+
+`dbdt_explorer(con)` is the Shiny version of the same thing. Because it holds a live connection it also previews the rows the query returns. It needs `shiny`, draws with Graphviz through `DiagrammeR` if that is installed, and previews with `DT` if that is installed.
+
+```r
+dbdt_explorer(con)
+dbdt_explorer(con, tables = c("orders", "customers"), infer_references = TRUE)
+```
+
+Given a data model instead of a connection, it browses and builds queries but cannot run them.
+
+## The data model {#data-model}
+
+Both of those draw a **data model**: a description of tables, columns, keys and references, ported from [datamodelr](https://github.com/bergant/datamodelr). You can build one yourself, edit it, and render it.
+
+```{r}
+dm <- dbdt_data_model(con)
+dm
+```
+
+It is a list of three `data.table`s:
+
+| Element | One row per... | Columns |
+|:---|:---|:---|
+| `dm$tables` | table | `table` (its identity: the bare name, or `"schema.name"` if the name occurs in more than one schema), `schema`, `name`, `type`, `n_rows`, `segment`, `display` |
+| `dm$columns` | column | `table`, `column`, `type`, `key` (0 if not a key, otherwise its position in the primary key), `ref`, `ref_col` |
+| `dm$references` | referencing column | `table`, `column`, `ref`, `ref_col`, `ref_id` (rows sharing an id form one compound reference), `ref_col_num` |
+
+```{r}
+dm$references
+```
+
+`dbdt_data_model(x, tables = NULL, infer_references = FALSE, row_counts = FALSE)` accepts a connection, a `"duckdt"` handle, a **named list of data frames** (names become table names), or a column-info data frame with at least `table` and `column` columns. That last route lets you model a database you cannot connect to. `is_dbdt_data_model()` tests for one.
+
+```{r}
+dbdt_data_model(list(
+  customers = data.frame(customer_id = 1L, name = "a"),
+  orders    = data.frame(order_id = 1L, customer_id = 1L, total = 1)
+))
+```
+
+## When the database declares no keys {#references}
+
+Most DuckDB databases, anything built by loading CSV or Parquet files, declare no foreign keys at all, which leaves the diagram a set of disconnected boxes. There are two remedies.
+
+### Guess them: `dbdt_dm_infer_references()`
+
+`dbdt_erd(con, infer_references = TRUE)` and `dbdt_data_model(con, infer_references = TRUE)` do this for you; the function is also available on its own. It reads the schema the way a person would: a column references table `t` when its name is `t`'s primary key (`customer_id` pointing at `customers.customer_id`), or the table name glued to that key (`customer_id` or `customerid` pointing at `customers.id`), with a naive plural and singular fallback so `customers` and `customer` both match.
+
+```{r}
+loose <- dbdt_data_model(list(
+  customers = data.frame(customer_id = 1:2, name = c("Ada", "Grace")),
+  orders    = data.frame(order_id = 1:3, customer_id = c(1L, 1L, 2L), total = c(10, 20, 30))
+))
+loose <- dbdt_dm_set_key(loose, "customers", "customer_id")
+loose <- dbdt_dm_set_key(loose, "orders", "order_id")
+
+loose <- dbdt_dm_infer_references(loose)
+loose$references
+```
+
+It is a deliberately conservative guess. Columns that already have a reference are left alone, a column that could point at more than one table is skipped as ambiguous, a bare `id` is never treated as pointing anywhere, and candidates whose types belong to different families (integer against text, say) are rejected. It needs primary keys to aim at, so set them first with `dbdt_dm_set_key()` if the database has none. Check the result rather than assuming it found everything; the columns it added are recorded in `attr(dm$references, "inferred")`.
+
+### State them: `dbdt_dm_add_references()`
+
+```{r}
+exact <- dbdt_data_model(list(
+  customers = data.frame(customer_id = 1:2, name = c("Ada", "Grace")),
+  orders    = data.frame(order_id = 1:3, customer_id = c(1L, 1L, 2L), total = c(10, 20, 30))
+))
+exact <- dbdt_dm_set_key(exact, "customers", "customer_id")
+exact <- dbdt_dm_add_references(exact, orders$customer_id == customers$customer_id)
+exact$references
+```
+
+`dbdt_dm_add_references()` takes the readable `table$column == other_table$other_column` form. Nothing is evaluated, since the names are read off the expression, so the tables need not exist as R objects. When the names are in variables, `dbdt_dm_add_reference(dm, table, column, ref, ref_col)` takes plain strings, and `ref_col` defaults to the referenced table's primary key. Adding a reference also marks the referenced column as a key, if that table has none.
+
+| Function | Does |
+|:---|:---|
+| `dbdt_dm_set_key(dm, table, column)` | Mark columns as a table's primary key. For a compound key, give them in key order. |
+| `dbdt_dm_add_references(dm, ...)` | Add references written as `table$column == ref$column` |
+| `dbdt_dm_add_reference(dm, table, column, ref, ref_col)` | The same with plain strings |
+| `dbdt_dm_infer_references(dm, quiet = FALSE)` | Guess references from column names |
+
+## Shape the model {#shape}
+
+Big schemas are unreadable all at once. These take a model and return a changed model.
+
+`dbdt_dm_filter()` zooms in. It keeps the tables you name and, with `depth`, whatever they connect to within that many reference hops, which is usually what you wanted.
+
+```{r}
+dbdt_dm_filter(dm, "orders", depth = 1)
+```
+
+`columns` narrows the columns kept for a table, as a named list: `dbdt_dm_filter(dm, "orders", columns = list(orders = c("order_id", "customer_id")))`.
+
+`dbdt_dm_set_segment()` groups tables into labelled clusters (drawn as boxes in the Graphviz diagram, and colour-coded groups in `dbdt_erd()`), and `dbdt_dm_set_display()` picks a colour palette per table by name, or `"hide"` to leave a table out of diagrams:
+
+```{r}
+dm <- dbdt_dm_set_segment(dm, list(
+  sales     = c("orders", "order_lines"),
+  catalogue = c("customers", "items")
+))
+dm <- dbdt_dm_set_display(dm, list(accent1 = "customers", accent2 = "items"))
+dm$tables[, .(table, segment, display)]
+```
+
+## Draw it {#draw}
+
+Every drawing function accepts a model, and also anything `dbdt_data_model()` accepts: a connection, a handle, a list of data frames.
+
+| Function | Produces | Needs |
+|:---|:---|:---|
+| `dbdt_erd(dm)` | The interactive HTML page | Nothing |
+| `dbdt_dm_mermaid(dm)` | [Mermaid](https://mermaid.js.org/) `erDiagram` source, for Quarto, R Markdown, GitHub | Nothing |
+| `dbdt_dm_dot(dm)` | Graphviz DOT source. Printing it draws the diagram. | `DiagrammeR` to draw |
+| `dbdt_dm_render(dm)` | An `htmlwidget`, for R Markdown, Quarto and Shiny | `DiagrammeR` |
+| `dbdt_dm_export(dm, file)` | An image file (SVG, PNG, PDF or PostScript) | `DiagrammeR`, `DiagrammeRsvg`, and `rsvg` for anything but SVG |
+
+`view` sets how much of each table is drawn: `"all"` columns, `"keys_only"` (primary and foreign keys), or `"title_only"`.
+
+```{r}
+cat(dbdt_dm_mermaid(dm, view = "keys_only"))
+```
+
+The Graphviz drawing has more options, among them `rankdir` (`"BT"` by default, or `"LR"`, `"TB"`, `"RL"`), `col_attr` (`c("column", "type")` also shows the SQL type), and `column_arrows` to draw edges between columns and not between table boxes.
+
+```{r}
+#| eval: !expr requireNamespace("DiagrammeR", quietly = TRUE)
+dbdt_dm_render(dm, view = "keys_only", rankdir = "LR", width = 720, height = 320)
+```
+
+```r
+dbdt_dm_export(dm, "schema.png", view = "keys_only")
+```
+
+### Colour schemes {#colours}
+
+A palette is four colours, and a scheme is a named list of palettes, which `dbdt_dm_set_display()` picks from by name. The built-in scheme has `"default"`, `"accent1"` to `"accent7"`, and border-less `"accent1nb"` to `"accent7nb"`.
+
+```{r}
+names(dbdt_dm_get_color_scheme())
+```
+
+```{r}
+dbdt_dm_add_colors(dbdt_dm_color_scheme(
+  fresh = dbdt_dm_palette(
+    line_color = "#1a7f64", header_bgcolor = "#22a37f",
+    header_font = "#FFFFFF", bgcolor = "#E6F5F0"
+  )
+))
+tail(names(dbdt_dm_get_color_scheme()), 2)
+```
+
+| Function | Does |
+|:---|:---|
+| `dbdt_dm_palette(line_color, header_bgcolor, header_font, bgcolor)` | One palette. `line_color = NULL` means no border. |
+| `dbdt_dm_color_scheme(...)` | A scheme from named palettes |
+| `dbdt_dm_add_colors(scheme)` | Add palettes to the scheme in use |
+| `dbdt_dm_set_color_scheme(scheme)` | Replace the scheme in use |
+| `dbdt_dm_get_color_scheme()` | The scheme in use |
+
+The scheme in use is stored in the `duckdt.dm_scheme` option.
+
+## Build the query: `dbdt_dm_query()` {#query}
+
+The query that the `dbdt_erd()` page shows as you tick boxes is available on its own. Name the tables, and the columns you want from each, and it works out the joins from the model's references:
+
+```{r}
+sql <- dbdt_dm_query(
+  dm, c("orders", "customers"),
+  columns = list(orders = "ordered_on", customers = "name"),
+  where = "city = 'Perth'"
+)
+cat(sql)
+```
+
+```{r}
+setDT(DBI::dbGetQuery(con, sql))[]
+```
+
+Tables are joined with `LEFT JOIN` along the model's references, starting from the first table you name. Columns default to all of a table's columns; `where` is inserted verbatim, and `limit` adds a row limit. A table that no reference path reaches cannot be joined automatically. It is left out and listed in the `"unjoined"` attribute, and is never silently cross-joined:
+
+```{r}
+attr(dbdt_dm_query(dm, c("orders", "items")), "unjoined")
+```
+
+`orders` and `items` are only connected through `order_lines`, so naming all three joins them:
+
+```{r}
+cat(dbdt_dm_query(dm, c("order_lines", "orders", "items"),
+                    columns = list(order_lines = "qty", orders = "ordered_on", items = "label")))
+```
+
+```{r}
+#| include: false
+dbdt_disconnect(con)
+```

@@ -77,29 +77,48 @@ duckdt_tail_sql <- function(qtbl, n, off, dialect, sel = "*") {
 
 #' Sample rows from a duckdt table
 #'
-#' Pushes DuckDB's `USING SAMPLE` clause down to the database, materializing
-#' `n` sampled rows as a `data.table`. This is a plain function rather than a
+#' Samples in the database, materializing the result as a `data.table`.
+#' This is a plain function rather than a
 #' `sample.duckdt` S3 method because base R's [sample()] is not a true S3
 #' generic (it doesn't call `UseMethod()`), so a `sample.duckdt` method would
 #' never be dispatched by a plain `sample(d, ...)` call.
 #'
 #' @param x A `"duckdt"` object.
-#' @param n Number of rows to sample.
+#' @param n Number of rows to sample, a non-negative whole number.
+#' @param method `"random"` (default) returns `n` random rows, or all rows
+#'   for a smaller table. On SQL Server this uses `ORDER BY NEWID()` and
+#'   processes the entire table. `"fast"` uses SQL Server's
+#'   `TABLESAMPLE SYSTEM` to read a sample of pages, capped at `n` rows.
+#'   It may return fewer rows (even zero), and rows on the same page are
+#'   sampled together; it is intended for exploration, not uniform random
+#'   sampling. It requires a local base table, not a view. On DuckDB both
+#'   methods use reservoir sampling.
 #'
-#' @return A `data.table` of `n` sampled rows.
+#' @return A `data.table` of at most `n` sampled rows.
 #' @export
-duckdt_sample <- function(x, n) {
-  n <- as.integer(n)
+duckdt_sample <- function(x, n, method = c("random", "fast")) {
+  method <- match.arg(method)
+  if (!is.numeric(n) || length(n) != 1L || is.na(n) || !is.finite(n) ||
+      n < 0 || n != trunc(n)) {
+    stop("`n` must be a single non-negative finite whole number.", call. = FALSE)
+  }
   dialect <- duckdt_dialect(x$conn)
-  sql <- duckdt_sample_sql(duckdt_qtbl(x), n, dialect, duckdt_star(x))
+  if (n > 0 && dialect == "mssql" && method == "fast" && !isTRUE(x$materialized)) {
+    stop('Fast sampling requires a SQL Server base table; use method = "random" or head() for views.',
+         call. = FALSE)
+  }
+  sql <- duckdt_sample_sql(duckdt_qtbl(x), n, dialect, duckdt_star(x), method)
   data.table::setDT(DBI::dbGetQuery(x$conn, sql))[]
 }
 
 # T-SQL's TABLESAMPLE is page-based/approximate and can't guarantee an exact
 # row count; ORDER BY NEWID() is the standard exact-n-row random sample idiom.
-duckdt_sample_sql <- function(qtbl, n, dialect, sel = "*") {
+duckdt_sample_sql <- function(qtbl, n, dialect, sel = "*", method = "random") {
+  if (n == 0) return(duckdt_limit_sql(qtbl, 0, dialect, sel))
+  n <- format(n, scientific = FALSE, trim = TRUE)
   if (dialect == "mssql") {
-    paste0("SELECT TOP (", n, ") ", sel, " FROM ", qtbl, " ORDER BY NEWID()")
+    sample <- if (method == "fast") paste0(" TABLESAMPLE SYSTEM (", n, " ROWS)") else ""
+    paste0("SELECT TOP (", n, ") ", sel, " FROM ", qtbl, sample, " ORDER BY NEWID()")
   } else {
     paste0("SELECT ", sel, " FROM ", qtbl, " USING SAMPLE reservoir(", n, " ROWS)")
   }

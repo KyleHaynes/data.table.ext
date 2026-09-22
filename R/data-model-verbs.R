@@ -4,15 +4,15 @@
 #' this is for the ones that don't (a DuckDB file loaded from CSV/Parquet,
 #' say), and for models built from plain data frames.
 #'
-#' @param dm A `"duckdt_data_model"` from [duckdt_data_model()].
+#' @param dm A `"duckdt_data_model"` from [dbdt_data_model()].
 #' @param table Table name.
 #' @param column Column name(s). For a compound key, pass them in key order.
 #'
 #' @return The data model, with the key set (and `$references` rebuilt, since
 #'   a reference with no explicit `ref_col` points at the key).
 #' @examples
-#' dm <- duckdt_data_model(list(people = data.frame(person_id = 1L, name = "a")))
-#' dm <- duckdt_dm_set_key(dm, "people", "person_id")
+#' dm <- dbdt_data_model(list(people = data.frame(person_id = 1L, name = "a")))
+#' dm <- dbdt_dm_set_key(dm, "people", "person_id")
 #' dm$columns
 #' @export
 duckdt_dm_set_key <- function(dm, table, column) {
@@ -31,17 +31,17 @@ duckdt_dm_set_key <- function(dm, table, column) {
 #' Add a reference (foreign key) to a data model
 #'
 #' DuckDB databases built by loading files rarely declare foreign keys, so
-#' [duckdt_data_model()] often comes back with nothing to draw between the
+#' [dbdt_data_model()] often comes back with nothing to draw between the
 #' boxes. These two add them after the fact:
-#' `duckdt_dm_add_references()` takes the readable
+#' `dbdt_dm_add_references()` takes the readable
 #' `table$column == other_table$other_column` form (a port of datamodelr's
-#' `dm_add_references()`), and `duckdt_dm_add_reference()` takes plain
+#' `dm_add_references()`), and `dbdt_dm_add_reference()` takes plain
 #' strings, for when the names are in variables.
 #'
 #' Adding a reference also marks the referenced column as a key, since that
 #' is what being referenced means.
 #'
-#' @param dm A `"duckdt_data_model"` from [duckdt_data_model()].
+#' @param dm A `"duckdt_data_model"` from [dbdt_data_model()].
 #' @param ... One or more expressions of the form
 #'   `table$column == ref_table$ref_column`. Nothing is evaluated -- the
 #'   names are read off the expression -- so the tables need not exist as R
@@ -51,13 +51,13 @@ duckdt_dm_set_key <- function(dm, table, column) {
 #'   to `ref`'s primary key.
 #'
 #' @return The data model, with the reference(s) added.
-#' @seealso [duckdt_dm_infer_references()] to guess them from column names.
+#' @seealso [dbdt_dm_infer_references()] to guess them from column names.
 #' @examples
-#' dm <- duckdt_data_model(list(
+#' dm <- dbdt_data_model(list(
 #'   orders = data.frame(id = 1L, customer_id = 1L),
 #'   customers = data.frame(id = 1L, name = "a")
 #' ))
-#' dm <- duckdt_dm_add_references(dm, orders$customer_id == customers$id)
+#' dm <- dbdt_dm_add_references(dm, orders$customer_id == customers$id)
 #' dm$references
 #' @export
 duckdt_dm_add_references <- function(dm, ...) {
@@ -116,7 +116,7 @@ duckdt_dm_add_reference <- function(dm, table, column, ref, ref_col = NULL) {
 #' Guess references from column naming conventions
 #'
 #' Most DuckDB databases don't declare foreign keys, so
-#' [duckdt_data_model()] has nothing to draw between the boxes. This fills
+#' [dbdt_data_model()] has nothing to draw between the boxes. This fills
 #' that gap the way a human reading the schema would: a column is treated as
 #' referencing table `t` when its name is `t`'s primary key (`customer_id`
 #' pointing at `customers.customer_id`), or the table name glued to that key
@@ -129,25 +129,25 @@ duckdt_dm_add_reference <- function(dm, table, column, ref, ref_col = NULL) {
 #' anywhere, and candidate pairs whose types are from different families
 #' (integer vs. text, say) are rejected. Check the result -- print the model,
 #' or look at `dm$references` -- rather than assuming it got everything
-#' right, and state anything it missed with [duckdt_dm_add_references()].
+#' right, and state anything it missed with [dbdt_dm_add_references()].
 #'
 #' Tables need primary keys for this to have anything to aim at. If the
-#' database declares none, set them first with [duckdt_dm_set_key()].
+#' database declares none, set them first with [dbdt_dm_set_key()].
 #'
-#' @param dm A `"duckdt_data_model"` from [duckdt_data_model()].
+#' @param dm A `"duckdt_data_model"` from [dbdt_data_model()].
 #' @param quiet Suppress the message summarising what was inferred.
 #'
 #' @return The data model, with inferred references added. The columns it
 #'   added are recorded in the `"inferred"` attribute of `$references`.
-#' @seealso [duckdt_dm_add_references()] to state references exactly.
+#' @seealso [dbdt_dm_add_references()] to state references exactly.
 #' @examples
-#' dm <- duckdt_data_model(list(
+#' dm <- dbdt_data_model(list(
 #'   customers = data.frame(customer_id = 1L, name = "a"),
 #'   orders = data.frame(order_id = 1L, customer_id = 1L)
 #' ))
-#' dm <- duckdt_dm_set_key(dm, "customers", "customer_id")
-#' dm <- duckdt_dm_set_key(dm, "orders", "order_id")
-#' dm <- duckdt_dm_infer_references(dm, quiet = TRUE)
+#' dm <- dbdt_dm_set_key(dm, "customers", "customer_id")
+#' dm <- dbdt_dm_set_key(dm, "orders", "order_id")
+#' dm <- dbdt_dm_infer_references(dm, quiet = TRUE)
 #' dm$references
 #' @export
 duckdt_dm_infer_references <- function(dm, quiet = FALSE) {
@@ -214,19 +214,19 @@ duckdt_dm_infer_references <- function(dm, quiet = FALSE) {
 
 #' Group tables into segments
 #'
-#' Segments are drawn as labelled clusters in [duckdt_dm_dot()] /
-#' [duckdt_dm_render()], and as colour-coded groups in [duckdt_erd()] --
+#' Segments are drawn as labelled clusters in [dbdt_dm_dot()] /
+#' [dbdt_dm_render()], and as colour-coded groups in [dbdt_erd()] --
 #' useful for saying "these six tables are the ordering side of the schema
 #' and those four are reference data".
 #'
-#' @param dm A `"duckdt_data_model"` from [duckdt_data_model()].
+#' @param dm A `"duckdt_data_model"` from [dbdt_data_model()].
 #' @param segments A named list: names are segment names, values are
 #'   character vectors of table names.
 #'
 #' @return The data model, with `$tables$segment` set.
 #' @examples
-#' dm <- duckdt_data_model(list(a = data.frame(x = 1), b = data.frame(y = 2)))
-#' dm <- duckdt_dm_set_segment(dm, list(core = "a", lookup = "b"))
+#' dm <- dbdt_data_model(list(a = data.frame(x = 1), b = data.frame(y = 2)))
+#' dm <- dbdt_dm_set_segment(dm, list(core = "a", lookup = "b"))
 #' dm$tables
 #' @export
 duckdt_dm_set_segment <- function(dm, segments) {
@@ -242,18 +242,18 @@ duckdt_dm_set_segment <- function(dm, segments) {
 #' Set how tables are displayed
 #'
 #' Each table can be given a colour palette name (see
-#' [duckdt_dm_color_scheme()] for the built-in ones: `"accent1"` ...
+#' [dbdt_dm_color_scheme()] for the built-in ones: `"accent1"` ...
 #' `"accent7"`, and their border-less `"accent1nb"` ... variants), or the
 #' special value `"hide"` to leave it out of diagrams entirely.
 #'
-#' @param dm A `"duckdt_data_model"` from [duckdt_data_model()].
+#' @param dm A `"duckdt_data_model"` from [dbdt_data_model()].
 #' @param display A named list: names are palette names (or `"hide"`),
 #'   values are character vectors of table names.
 #'
 #' @return The data model, with `$tables$display` set.
 #' @examples
-#' dm <- duckdt_data_model(list(a = data.frame(x = 1), b = data.frame(y = 2)))
-#' dm <- duckdt_dm_set_display(dm, list(accent1 = "a", hide = "b"))
+#' dm <- dbdt_data_model(list(a = data.frame(x = 1), b = data.frame(y = 2)))
+#' dm <- dbdt_dm_set_display(dm, list(accent1 = "a", hide = "b"))
 #' dm$tables
 #' @export
 duckdt_dm_set_display <- function(dm, display) {
@@ -272,7 +272,7 @@ duckdt_dm_set_display <- function(dm, display) {
 #' name -- plus, with `depth`, whatever they connect to within that many
 #' reference hops, which is usually what you actually wanted.
 #'
-#' @param dm A `"duckdt_data_model"` from [duckdt_data_model()].
+#' @param dm A `"duckdt_data_model"` from [dbdt_data_model()].
 #' @param tables Character vector of table names to keep.
 #' @param depth Also keep tables within this many reference hops of
 #'   `tables`. Default `0` (just the named tables).
@@ -283,13 +283,13 @@ duckdt_dm_set_display <- function(dm, display) {
 #' @return A data model containing only the kept tables/columns, and only the
 #'   references between them.
 #' @examples
-#' dm <- duckdt_data_model(list(
+#' dm <- dbdt_data_model(list(
 #'   orders = data.frame(id = 1L, customer_id = 1L),
 #'   customers = data.frame(id = 1L, name = "a"),
 #'   unrelated = data.frame(z = 1)
 #' ))
-#' dm <- duckdt_dm_add_references(dm, orders$customer_id == customers$id)
-#' duckdt_dm_filter(dm, "orders", depth = 1)
+#' dm <- dbdt_dm_add_references(dm, orders$customer_id == customers$id)
+#' dbdt_dm_filter(dm, "orders", depth = 1)
 #' @export
 duckdt_dm_filter <- function(dm, tables, depth = 0L, columns = NULL) {
   duckdt_dm_check(dm)

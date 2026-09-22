@@ -1,0 +1,225 @@
+---
+title: "Join, write & merge"
+description: "Join tables inside the database, keep a subset there with temporary tables, and change tables in place with := and dbdt_merge()."
+---
+
+```{r}
+#| include: false
+source("_setup.R")
+```
+
+Three verbs, and one rule of thumb: **`dbdt_join()` reads, `dbdt_merge()` writes, and `dbdt_temp()` keeps a subset in the database** so the other two can use it.
+
+| I want to... | Use | Changes the inputs? |
+|:---|:---|:---|
+| Combine two tables into a new result | [`dbdt_join()`](#join), or `merge()` | No |
+| Keep a filtered subset in the database | [`dbdt_temp()`](#temp) | No (it creates a temporary table) |
+| Add or change a column | [`:=`](#write) | Yes, in place |
+| Patch a table with corrections: update, insert, delete | [`dbdt_merge()`](#merge) | Yes, in place |
+
+The examples use the toy shop database:
+
+```{r}
+con <- dbdt_example()
+orders <- dbdt(con, "orders")
+customers <- dbdt(con, "customers")
+items <- dbdt(con, "items")
+```
+
+## Joining: `dbdt_join()` {#join}
+
+`dbdt_join()` is a database-side `merge()`: the two tables are joined in SQL, and only the result comes back to R. Both inputs are left alone.
+
+```{r}
+dbdt_join(orders, customers, by = "customer_id")
+```
+
+Either side may be a `"duckdt"` handle or an ordinary `data.frame` or `data.table`. An R-side table is copied into a temporary table on the connection first, so the join itself always runs in the engine.
+
+```{r}
+regions <- data.table(city = c("Perth", "Sydney"), region = c("West", "East"))
+dbdt_join(customers, regions, by = "city")
+```
+
+`merge(x, y, ...)` on a handle calls `dbdt_join()`, so the familiar spelling works too:
+
+```{r}
+merge(orders, customers, by = "customer_id")
+```
+
+The arguments behave as in base `merge()`:
+
+| Argument | Effect |
+|:---|:---|
+| `by` | Join column(s), present in both. Defaults to every column the two share (a natural join). |
+| `by.x`, `by.y` | Join on differently named columns; give both. The result keeps `by.x`'s names. |
+| `all`, `all.x`, `all.y` | No `all*` is an inner join; `all.x` is a left join, `all.y` a right join, `all` a full outer join. |
+| `suffixes` | Disambiguate non-key columns both sides have. Default `c(".x", ".y")`. |
+| `sort` | Sort by the join columns (default `TRUE`). `FALSE` returns the engine's order, which is faster and arbitrary. |
+
+Alan Turing has no orders. A left join from `customers` keeps him, with `NA` where the order columns would be:
+
+```{r}
+dbdt_join(customers, orders, by = "customer_id", all.x = TRUE)
+```
+
+Joining on differently named columns:
+
+```{r}
+discounts <- data.table(id = 1:3, discount = c(0, 0.1, 0.2))
+dbdt_join(items, discounts, by.x = "item_id", by.y = "id")
+```
+
+At least one side must be a `"duckdt"` handle, since that says which database to run in, and if both are, they must share a connection. Joining two R data frames is `data.table`'s job. Missing keys never match in a database join; see [Limitations](limitations.qmd#na-keys).
+
+## Keeping a subset in the database: `dbdt_temp()` {#temp}
+
+`d[i, j, by]` returns a `data.table`, so the rows have left the database. `dbdt_temp()` runs the same query, leaves the result in the database as a temporary table, and hands back a `"duckdt"` handle. Nothing crosses into R.
+
+```{r}
+sub <- dbdt_temp(orders, customer_id == 1)
+sub
+```
+
+The handle works anywhere a handle does. Here the join runs entirely inside DuckDB:
+
+```{r}
+dbdt_join(sub, customers, by = "customer_id")
+```
+
+Drop it when you are finished:
+
+```{r}
+dbdt_drop(sub)
+```
+
+- `i`, `j` and `by` are all optional; `dbdt_temp(x)` copies the whole table. `name` sets the table name, which is otherwise generated and unique within the session.
+- The handle is materialised and writable, so `:=` and `dbdt_merge()` work on it. Writes land on the temporary copy and leave the source table alone.
+- On DuckDB it is a genuine `TEMP` table in the session's `temp` schema, and it disappears when the connection closes. On SQL Server it is created with `SELECT ... INTO` as an ordinary table on the current schema, so it outlives the session and you should `dbdt_drop()` it.
+- `dbdt_drop()` refuses handles that `dbdt_temp()` did not create, unless you pass `force = TRUE`.
+- Use the handle `dbdt_temp()` returns. Wrapping the temporary table again with `dbdt()` loses its temporary status.
+
+```{r}
+#| error: true
+dbdt_drop(orders)
+```
+
+## Writing: `:=` {#write}
+
+`:=` adds or changes a column **in the database**. It needs a handle over a real table that is writable. `as.dbdt(x, copy = TRUE)` gives you one immediately, since you just created that table:
+
+```{r}
+cars <- as.dbdt(data.table(car = rownames(mtcars), mtcars), conn = con, name = "cars", copy = TRUE)
+```
+
+```{r}
+#| output: false
+cars[, kw := hp * 0.7457]        # add a computed column
+cars[cyl == 6, kw := kw * 1.1]   # change matching rows only
+cars[, `:=`(wt_kg = wt * 453.6, mpg_l100 = 235.215 / mpg)]   # several at once
+```
+
+```{r}
+cars[cyl == 6, .(car, hp, kw, wt_kg)][order(car)][1:3]
+```
+
+`:=` returns the handle, so at the console it prints after each assignment; that output is hidden in the chunk above. Wrap a call in `invisible()` if you would rather it stayed quiet.
+
+A handle from `dbdt(con, "table")` is **read-only by default**, so a table you wrapped only to look at cannot be changed by accident. Opt in when you mean to write:
+
+```{r}
+#| error: true
+customers[, city_upper := toupper(city)]
+```
+
+```{r}
+#| output: false
+ol <- dbdt(con, "order_lines", writable = TRUE)
+ol[, qty_doubled := qty * 2L]
+```
+
+```{r}
+ol[, .(order_id, line_no, qty, qty_doubled)][order(order_id, line_no)]
+```
+
+A view (from a zero-copy `as.dbdt()`, or `dbdt_csv()` and `dbdt_parquet()`) can never be written to.
+
+::: {.callout-warning}
+## `:=` rebuilds the table
+To let DuckDB infer the new column's type, `:=` runs `CREATE OR REPLACE TABLE ... AS SELECT ...` over the whole table. That has consequences worth knowing before you use it on a table that matters:
+
+**Constraints are lost.** A table's primary key and `NOT NULL` constraints are not carried over:
+
+```{r}
+#| output: false
+DBI::dbExecute(con, "CREATE TABLE tagged (id INTEGER PRIMARY KEY, x INTEGER NOT NULL)")
+DBI::dbExecute(con, "INSERT INTO tagged VALUES (1, 10), (2, 20)")
+
+constraints <- function(tbl) {
+  DBI::dbGetQuery(con, sprintf(
+    "SELECT constraint_type FROM duckdb_constraints() WHERE table_name = '%s'", tbl
+  ))$constraint_type
+}
+```
+
+```{r}
+constraints("tagged")
+```
+
+```{r}
+tagged <- dbdt(con, "tagged", writable = TRUE)
+invisible(tagged[, y := x * 2L])
+constraints("tagged")
+```
+
+**It cannot run on a table that another table references,** because the old table cannot be dropped while something depends on it:
+
+```{r}
+#| error: true
+dbdt(con, "customers", writable = TRUE)[, city_upper := toupper(city)]
+```
+
+**Each assigned column is written in its own step.** If a later expression fails, the earlier columns stay written.
+
+There is no grouped `:=` (`by` together with a write). On SQL Server `:=` is emulated with a `SELECT ... INTO` rebuild and `sp_rename` inside a transaction, which is not a true atomic replace either: permissions and triggers on the original table are not preserved.
+:::
+
+## Merging: `dbdt_merge()` {#merge}
+
+`dbdt_merge()` patches a table **in place** with a subset. The subset `y` (a data frame, or another `"duckdt"` on the same connection) is staged into a temporary table first, so the big table never round-trips through R. Then, all in SQL:
+
+- rows in both are **updated** (`update = TRUE`, the default),
+- rows only in `y` are **inserted** (`insert = TRUE`, the default),
+- rows only in `x` are **deleted** (`delete = TRUE`; off by default).
+
+```{r}
+kv <- as.dbdt(data.table(k = 1:3, v = c("a", "b", "c")), conn = con, name = "kv", copy = TRUE)
+patch <- data.table(k = c(2L, 9L), v = c("B", "Z"))
+
+dbdt_merge(kv, patch, by = "k")     # update k = 2, insert k = 9
+kv[, .(k, v)][order(k)]
+```
+
+```{r}
+# Update only: skip rows that are not already there.
+dbdt_merge(kv, data.table(k = c(3L, 10L), v = c("C", "X")), by = "k", insert = FALSE)
+kv[, .(k, v)][order(k)]
+```
+
+```{r}
+# Replace the subset entirely: also delete rows that are not in `y`.
+dbdt_merge(kv, data.table(k = c(1L, 2L), v = c("one", "two")), by = "k", delete = TRUE)
+kv[, .(k, v)][order(k)]
+```
+
+- **`x`** must be a `"duckdt"` handle over a materialised, writable table, since the merge changes it. A `[` result has already left the database and cannot be used here.
+- **`by`** defaults to every column `x` and `y` share, like base `merge()`. A column cannot be both a match key and something `update` sets from `y`, so pass `by =` explicitly whenever `y` carries value columns you want updated.
+- Columns of `y` that are not in `x` are ignored. Add the column with `:=` first.
+- On DuckDB the merge is an `UPDATE ... FROM`, an anti-join `INSERT` and, with `delete = TRUE`, an anti-join `DELETE`, wrapped in a transaction. On SQL Server it is a single native `MERGE` statement.
+
+`dbdt_merge()` writes. To combine two tables into a new result without touching either, use [`dbdt_join()`](#join).
+
+```{r}
+#| include: false
+dbdt_disconnect(con)
+```

@@ -1,29 +1,33 @@
-#' Wrap an existing DuckDB table or view as a duckdt handle
+#' Wrap an existing database table or view as a duckdt handle
 #'
 #' `duckdt` objects are thin handles: `list(conn, tbl)`. No data is copied;
 #' every operation on them (`[`, `print`, `dim`, ...) issues SQL against
-#' `conn`. Most users will start from [as.duckdt()], [duckdt_csv()], or
-#' [duckdt_parquet()] instead of calling this directly.
+#' `conn`. Most users will start from [as.dbdt()], [dbdt_csv()], or
+#' [dbdt_parquet()] instead of calling this directly.
 #'
-#' Handles created here default to **read-only**: `:=` and [duckdt_merge()]
+#' Handles created here default to **read-only**: `:=` and [dbdt_merge()]
 #' both refuse to run against them, even if `table` is a materialized base
 #' table capable of being written to. This guards against accidentally
 #' mutating a table you only meant to explore -- e.g. after reconnecting to
 #' a persistent `.duckdb` file. Pass `writable = TRUE` once you actually mean
-#' to write. (Handles from [as.duckdt()] are writable immediately, since you
+#' to write. (Handles from [as.dbdt()] are writable immediately, since you
 #' just created that table in the same call.)
 #'
-#' @param conn A `DBI` connection to a DuckDB database, e.g. from
-#'   [duckdb::duckdb()].
+#' @param conn A `DBI` connection to DuckDB or Microsoft SQL Server.
 #' @param table Name of an existing table or view in `conn`.
 #' @param materialized Is `table` a real, mutable base table (`TRUE`) as
 #'   opposed to a read-only view (`FALSE`)? Only materialized tables support
 #'   `:=` writes. `NA` (the default) auto-detects via `information_schema`.
-#' @param writable Allow `:=` and [duckdt_merge()] to write through this
+#' @param writable Allow `:=` and [dbdt_merge()] to write through this
 #'   handle? Default `FALSE` (see Details). Has no effect if `materialized`
 #'   is/resolves to `FALSE` -- views are never writable regardless.
 #'
 #' @return An object of class `"duckdt"`.
+#' @details
+#' Use `dbdt()`, `as.dbdt()` and `dbdt_*()` for new code. The original
+#' `duckdt` names remain available with identical behavior. The S3 classes
+#' and `duckdt.*` options are retained for compatibility. [dbdt_connect()]
+#' opens DuckDB; use a `DBI`/`odbc` connection for SQL Server.
 #' @export
 duckdt <- function(conn, table, materialized = NA, writable = FALSE) {
   if (!duckdt_exists(conn, table)) {
@@ -67,10 +71,19 @@ duckdt_columns <- function(x) {
 
 duckdt_qtbl <- function(x) DBI::dbQuoteIdentifier(x$conn, x$tbl)
 
+#' @param x A `"duckdt"` database handle.
+#' @param n Number of preview rows to print.
+#' @param count Count all rows when printing? Defaults to `FALSE` on SQL
+#'   Server to avoid scanning the table just to preview it. An uncounted
+#'   row total is displayed as `?`. `nrow()` and `dim()` still count exactly.
+#' @param ... Unused.
+#' @rdname duckdt
 #' @export
-print.duckdt <- function(x, n = 6L, ...) {
+print.duckdt <- function(x, n = 6L, ..., count = duckdt_dialect(x$conn) != "mssql") {
   cols <- duckdt_columns(x)
-  nr <- DBI::dbGetQuery(x$conn, paste0("SELECT count(*) AS n FROM ", duckdt_qtbl(x)))$n
+  nr <- if (isTRUE(count)) {
+    DBI::dbGetQuery(x$conn, paste0("SELECT count(*) AS n FROM ", duckdt_qtbl(x)))$n
+  } else "?"
   status <- if (!isTRUE(x$materialized)) {
     " (view)"
   } else if (isTRUE(x$temporary)) {

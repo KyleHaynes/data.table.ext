@@ -396,10 +396,10 @@
 
   function buildR(sel) {
     if (!sel.length) {
-      return "# Tick a table on the left to build a query.\n\nlibrary(duckdt)\n" +
-        "con <- duckdt_connect(" + (model.dbdir ? JSON.stringify(model.dbdir) : "") + ")";
+      return "# Tick a table on the left to build a query.\n\nlibrary(data.table.ext)\n" +
+        "con <- dbdt_connect(" + (model.dbdir ? JSON.stringify(model.dbdir) : "") + ")";
     }
-    var head = "library(duckdt)\n\n# con <- duckdt_connect(" +
+    var head = "library(data.table.ext)\n\n# con <- dbdt_connect(" +
       (model.dbdir ? JSON.stringify(model.dbdir) : "") + ")\n\n";
 
     if (sel.length === 1) {
@@ -408,7 +408,7 @@
       var all = colsOf[t.table].length === picked.length;
       var plain = !t.schema || t.schema === "main" || t.schema === "dbo";
       if (plain) {
-        var code = head + "d <- duckdt(con, " + JSON.stringify(t.name) + ")\n";
+        var code = head + "d <- dbdt(con, " + JSON.stringify(t.name) + ")\n";
         if (all) {
           code += "d[]\n";
         } else if (picked.every(function (c) { return /^[A-Za-z.][A-Za-z0-9._]*$/.test(c); })) {

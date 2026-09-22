@@ -1,6 +1,6 @@
 #' Explore a database in a Shiny app
 #'
-#' The interactive version of [duckdt_erd()]: the same tick-a-table,
+#' The interactive version of [dbdt_erd()]: the same tick-a-table,
 #' tick-a-column browsing, but with a live diagram, the generated
 #' `duckdt`/SQL code, and -- since it has a connection rather than a static
 #' page -- a preview of the rows the query actually returns.
@@ -8,7 +8,7 @@
 #' Needs the `shiny` package. The diagram is drawn with Graphviz via
 #' `DiagrammeR` if that's installed, and falls back to showing the DOT
 #' source if not; the row preview uses `DT` if that's installed. Nothing
-#' beyond duckdt itself is needed for [duckdt_erd()], which covers the same
+#' beyond duckdt itself is needed for [dbdt_erd()], which covers the same
 #' ground in a plain HTML page.
 #'
 #' @param x A `DBI` connection, a `"duckdt"` object, or a
@@ -16,17 +16,17 @@
 #'   browses and builds queries but cannot run them.
 #' @param tables Optionally, a character vector of tables to model.
 #' @param infer_references Guess undeclared foreign keys from column naming
-#'   conventions, via [duckdt_dm_infer_references()].
+#'   conventions, via [dbdt_dm_infer_references()].
 #' @param row_counts Show each table's row count (a `count(*)` per table).
 #' @param ... Passed to [shiny::shinyApp()].
 #'
 #' @return A Shiny app object. Printed at the console (or returned from a
 #'   `.R` file passed to [shiny::runApp()]) it starts the app.
-#' @seealso [duckdt_erd()] for the dependency-free browser version.
+#' @seealso [dbdt_erd()] for the dependency-free browser version.
 #' @examples
 #' \dontrun{
-#' con <- duckdt_connect("C:/data/warehouse.duckdb", read_only = TRUE)
-#' duckdt_explorer(con, infer_references = TRUE)
+#' con <- dbdt_connect("C:/data/warehouse.duckdb", read_only = TRUE)
+#' dbdt_explorer(con, infer_references = TRUE)
 #' }
 #' @export
 duckdt_explorer <- function(x, tables = NULL, infer_references = FALSE,
@@ -229,7 +229,7 @@ duckdt_explorer_r_code <- function(dm, tables, columns, sql) {
     plain <- is.na(tabs$schema[i]) || tabs$schema[i] %in% c("main", "dbo")
     all_of <- setdiff(as.data.frame(dm$columns)$column[dm$columns$table == tables], picked)
     if (plain) {
-      code <- sprintf('d <- duckdt(con, "%s")', tabs$name[i])
+      code <- sprintf('d <- dbdt(con, "%s")', tabs$name[i])
       if (!length(all_of)) {
         return(paste(code, "d[]", sep = "\n"))
       }

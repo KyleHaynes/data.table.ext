@@ -6,9 +6,9 @@
 #' temporary table on the connection first, so the join itself always runs in
 #' the engine rather than in R.
 #'
-#' This is *not* [duckdt_merge()]. `duckdt_join()` reads: it computes a new
+#' This is *not* [dbdt_merge()]. `dbdt_join()` reads: it computes a new
 #' result set and returns it, leaving both inputs untouched, the way base
-#' [merge()] does. `duckdt_merge()` writes: it reconciles `y` **into** `x`'s
+#' [merge()] does. `dbdt_merge()` writes: it reconciles `y` **into** `x`'s
 #' table in place (update/insert/delete). Reach for this one to combine
 #' tables, and for that one to patch a table.
 #'
@@ -46,12 +46,12 @@
 #' back as an R vector. This happens after `by` is resolved, so a natural
 #' join still keys on exactly the columns base [merge()] would -- a binary
 #' column used as a join key is kept.
-#' @seealso [duckdt_temp()] to keep a filtered subset in the database so it
-#'   can be joined; [duckdt_merge()] for the write-path counterpart.
+#' @seealso [dbdt_temp()] to keep a filtered subset in the database so it
+#'   can be joined; [dbdt_merge()] for the write-path counterpart.
 #' @examples
-#' d <- as.duckdt(datasets::mtcars, name = "cars")
+#' d <- as.dbdt(datasets::mtcars, name = "cars")
 #' labels <- data.frame(cyl = c(4, 6, 8), label = c("four", "six", "eight"))
-#' head(duckdt_join(d, labels, by = "cyl"), 3)
+#' head(dbdt_join(d, labels, by = "cyl"), 3)
 #' @export
 duckdt_join <- function(x, y, by = NULL, by.x = NULL, by.y = NULL,
                         all = FALSE, all.x = all, all.y = all,
@@ -89,7 +89,7 @@ duckdt_join <- function(x, y, by = NULL, by.x = NULL, by.y = NULL,
 }
 
 #' @rdname duckdt_join
-#' @param ... Passed on to [duckdt_join()].
+#' @param ... Passed on to [dbdt_join()].
 #' @exportS3Method base::merge
 merge.duckdt <- function(x, y, ...) duckdt_join(x, y, ...)
 

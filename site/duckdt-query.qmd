@@ -1,0 +1,255 @@
+---
+title: "Query with [i, j, by]"
+description: "How data.table's i, j and by become one SQL query, what is translated, and what is not."
+---
+
+```{r}
+#| include: false
+source("_setup.R")
+```
+
+On a `duckdt` handle, `d[i, j, by]` translates the three slots into one SQL `SELECT`, runs it inside DuckDB, and returns a `data.table`. The slots mean what they always do: `i` says which rows, `j` says what to return, `by` says grouped how.
+
+```{r}
+con <- dbdt_example()
+orders <- dbdt(con, "orders")
+items <- dbdt(con, "items")
+customers <- dbdt(con, "customers")
+```
+
+## The three slots {#slots}
+
+| You write | DuckDB runs (simplified) |
+|:---|:---|
+| `items[price > 100]` | `SELECT * FROM items WHERE price > 100` |
+| `items[price > 100, .(label, price)]` | `SELECT label, price FROM items WHERE price > 100` |
+| `orders[, .(n = .N), by = customer_id]` | `SELECT customer_id, count(*) AS n FROM orders GROUP BY customer_id` |
+
+```{r}
+items[price > 100]
+```
+
+```{r}
+items[price > 100, .(label, price)]
+```
+
+```{r}
+orders[, .(n = .N), by = customer_id][order(customer_id)]
+```
+
+Every `[` runs **immediately**: one query, one `data.table` back. That keeps the mental model identical to plain `data.table`, and you keep chaining on the result the way you always would, as the `[order(customer_id)]` above does. The result has left the database at that point; to keep a subset *in* the database, use [`dbdt_temp()`](duckdt-join-write.qmd#temp).
+
+## Filtering rows: `i` {#i}
+
+| Kind | Supported |
+|:---|:---|
+| Comparison | `==`, `!=`, `<`, `<=`, `>`, `>=` |
+| Logic | `&`, `\|`, `!` (and `&&`, `\|\|`), parentheses |
+| Membership and range | `%in%`, `%chin%`, `%between%` |
+| Text | `%like%`, `%ilike%`, `%flike%`, `%plike%` |
+| Missing values | `is.na()` |
+| Arithmetic | `+`, `-`, `*`, `/` |
+| Functions | the ones under [Functions](#functions) |
+
+```{r}
+items[price %between% c(5, 200)]
+```
+
+```{r}
+orders[customer_id %in% c(1, 3) & !is.na(ordered_on)]
+```
+
+### Text matching {#text}
+
+Like `data.table`, the `%like%` family matches **regular expressions**, not SQL `LIKE` wildcards, except `%flike%`, which is a literal substring match. They run as DuckDB's `regexp_matches()` and `contains()`.
+
+| Operator | Matches |
+|:---|:---|
+| `%like%` | regular expression, case-sensitive |
+| `%ilike%` | regular expression, case-insensitive |
+| `%flike%` | literal substring |
+| `%plike%` | alias of `%like%` |
+
+```{r}
+customers[name %ilike% "^a"]
+```
+
+```{r}
+customers[name %flike% "Turing"]
+```
+
+DuckDB's regular expressions use RE2, which has no PCRE backreferences or lookaround, so `%plike%` is a best-effort alias for `%like%` and not real Perl-regex support.
+
+### Using R values {#r-values}
+
+A name that is not a column is looked up in the calling environment, as it is in `data.table`, so variables and function arguments work:
+
+```{r}
+min_price <- 100
+items[price > min_price, .(label, price)]
+```
+
+```{r}
+pricier_than <- function(threshold) items[price > threshold, .(label)]
+pricier_than(50)
+```
+
+Only *values* travel this way. A call to an R function is not evaluated in R: anything that is not translated is sent to DuckDB **by name**, and fails if DuckDB has no such function. Work out R-side values first, then refer to them by name:
+
+```{r}
+#| error: true
+orders[ordered_on >= as.Date("2024-03-05")]
+```
+
+```{r}
+cutoff <- as.Date("2024-03-05")
+orders[ordered_on >= cutoff]
+```
+
+## Choosing and computing columns: `j` {#j}
+
+`j` is a bare column name, or `.(...)` / `list(...)` to select, rename and compute. It always returns a `data.table`, even for a single column.
+
+```{r}
+items[, .(label, price_incl_gst = price * 1.1)]
+```
+
+Aggregates work inside `.()`, and `.N` is the row count:
+
+```{r}
+orders[, .(n = .N, first_order = min(ordered_on), last_order = max(ordered_on))]
+```
+
+A bare call in `j` is not supported. Wrap it in `.()`:
+
+```{r}
+#| error: true
+items[, mean(price)]
+```
+
+```{r}
+items[, .(avg_price = mean(price))]
+```
+
+`j` can also be a `:=` assignment, which writes to the table; see [Join, write & merge](duckdt-join-write.qmd#write).
+
+### Functions {#functions}
+
+Some R function names are renamed to their DuckDB equivalent. Any other call is sent to DuckDB by name, upper-cased, so any DuckDB scalar function you can write in R call syntax works: `year()`, `substr()`, `coalesce()`, `regexp_replace()` and so on.
+
+| In R | Sent to DuckDB as |
+|:---|:---|
+| `mean()` | `avg()` |
+| `sd()`, `var()` | `stddev()`, `variance()` |
+| `length()` | `count()` |
+| `toupper()`, `tolower()` | `upper()`, `lower()` |
+| `nchar()` | `length()` |
+| `sum()`, `min()`, `max()`, `median()`, `abs()`, `round()` | the same name |
+
+```{r}
+customers[, .(initial = substr(name, 1, 1), shout = toupper(name))]
+```
+
+```{r}
+orders[, .(n = .N), by = .(year = year(ordered_on))]
+```
+
+R functions that have no DuckDB function of the same name, such as `ifelse()`, are not available. Write that step in SQL with `DBI::dbGetQuery()`, or do it on the returned `data.table`.
+
+## Grouping: `by` {#by}
+
+`by` takes a bare column, a character vector, or `.()`, `list()` or `c()`. Give a computed group a name and it becomes a column of the result:
+
+```{r}
+orders[, .(n = .N), by = .(year = year(ordered_on), customer_id)][order(customer_id)]
+```
+
+```{r}
+items[, .(n = .N, avg_price = mean(price)), by = .(pricey = price > 100)][order(pricey)]
+```
+
+## Missing values {#na}
+
+`%in%` behaves as in R and never returns `NA`. SQL aggregates already skip `NULL`, so `mean(x)` is the same as R's `mean(x, na.rm = TRUE)`. The `na.rm` argument itself is not translated: it is passed to DuckDB as an extra argument, and DuckDB rejects it.
+
+```r
+customers[, .(mean_id = mean(customer_id, na.rm = TRUE))]
+#> Error: Binder Error: No function matches the given name and argument types
+#> 'avg(INTEGER, BOOLEAN)'. ...
+```
+
+Leave `na.rm` out.
+
+## Ordering and row positions {#ordering}
+
+DuckDB tables have no inherent row order, so two things from `data.table` do not carry over: `order()` inside `i`, and row positions such as `d[1:5]`. Neither is meaningful without an explicit sort, and both fail. Sort the result, which is an ordinary `data.table`:
+
+```{r}
+items[price > 5, .(label, price)][order(-price)]
+```
+
+Without an `order()`, expect no particular row order from any query.
+
+## Peeking and sampling {#peeking}
+
+```{r}
+head(items, 2)
+```
+
+```{r}
+tail(items, 2)
+```
+
+```{r}
+dbdt_sample(items, 2)
+```
+
+| Function | Runs as |
+|:---|:---|
+| `head(d, n)` | `SELECT * ... LIMIT n` |
+| `tail(d, n)` | `... LIMIT n OFFSET (rows - n)` |
+| `dbdt_sample(d, n)` | `... USING SAMPLE reservoir(n ROWS)` |
+
+A negative `n` works as in base R: `head(d, -2)` is everything but the last two rows. `tail()` reflects DuckDB's current scan order and not a guaranteed original order. `dbdt_sample()` samples without replacement; DuckDB's sampling clause has no replacement option. It is a plain function because base `sample()` is not an S3 generic, so `sample(d, n)` would never reach a method.
+
+`nrow()`, `ncol()`, `dim()`, `names()` and `colnames()` also work on a handle.
+
+## Binary columns {#binary}
+
+No driver hands a binary column (`BLOB` and `BIT` on DuckDB; `varbinary`, `binary` and `image` on SQL Server) back as an R vector, and asking for one fails the *whole* query, so a single such column would make a table unreadable. When rows are on their way into R, `duckdt` leaves binary columns out, and says so.
+
+```{r}
+#| output: false
+DBI::dbExecute(con, "CREATE TABLE files (id INTEGER, name VARCHAR, payload BLOB)")
+DBI::dbExecute(con, "INSERT INTO files VALUES (1, 'a.bin', 'abc'::BLOB)")
+files <- dbdt(con, "files")
+```
+
+```{r}
+files
+```
+
+```{r}
+head(files)
+```
+
+Name the column in `j` to fetch it anyway (it fails if the driver cannot convert it). Anything that stays in the database, such as `:=`, [`dbdt_temp()`](duckdt-join-write.qmd#temp) and [`dbdt_merge()`](duckdt-join-write.qmd#merge), still sees every column. You can also reduce a binary column inside the database, here to its size in bytes:
+
+```{r}
+files[, .(name, bytes = octet_length(payload))]
+```
+
+## What is not supported {#not-supported}
+
+- **Lazy, chained queries.** Every `[` runs at once. [`dbdt_temp()`](duckdt-join-write.qmd#temp) is the escape hatch: it runs a query into a temporary table and hands back a handle.
+- **Row positions and `order()` in `i`**, as above.
+- **Grouped `:=`**, that is `by =` together with a write.
+- **`dbdt_sample(replace = TRUE)`.**
+- **`na.rm` and R-only functions** such as `ifelse()` and `as.Date()`.
+
+See [Limitations](limitations.qmd) for the full list, including the caveats that apply to writes and joins.
+
+```{r}
+#| include: false
+dbdt_disconnect(con)
+```

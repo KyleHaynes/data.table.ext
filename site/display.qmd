@@ -1,0 +1,210 @@
+---
+title: "Printing & sampling"
+description: "Thousands separators, coloured class rows, group-aware sampling, row highlighting, and friendlier str() and dput() output."
+---
+
+```{r}
+#| include: false
+source("_setup.R")
+```
+
+Raw `data.table` output is fast and practical. When you are demoing results, reviewing a sampled cohort, debugging a mixed-type table or pasting console output into a document, small readability improvements add up. This page covers what changes how a table *looks*: the print mask, grouped sampling and display, row highlighting, and the `str()` and `dput()` masks. For checks that *find* things, see [Data checks & helpers](checks.qmd).
+
+Every example uses a 15-row slice of `iris`, five rows per species, so the output stays short:
+
+```{r}
+DT <- as.data.table(iris)[c(1:5, 51:55, 101:105)]
+```
+
+## The print mask {#print-mask}
+
+`enable_dt_print_thousands()` is switched on when you attach the package. It wraps `data.table`'s own printer and post-processes what it prints:
+
+- thousands separators in the row numbers, with alignment kept stable
+- a coloured class row (`<int>`, `<char>`, `<Date>`, ...)
+- an `ncol:` header above the table
+- separators and value colours for grouped output (see [below](#grouped-sampling))
+- duplicated column names marked in red
+
+```{r}
+big <- data.table(row_id = 1:10000, value = round(rnorm(10000), 2))
+big
+```
+
+Long tables print compactly: with the mask on, a table of more than 11 rows shows its first and last five rows with a `---` line between. Plain `data.table` prints up to 100 rows before it truncates. To see more, raise `topn`, either for one call, `print(DT, topn = 50)`, or for the session, `options(datatable.print.topn = 50)`. Grouped output (below) is the exception: it prints every row.
+
+Duplicated column names are easy to miss; the mask marks them:
+
+```{r}
+data.table(x = 1, x = 1, y = 2)
+```
+
+### Tuning it
+
+Call `enable_dt_print_thousands()` again with different arguments. Each call replaces the previous settings, and anything you leave out goes back to its default.
+
+| Argument | Default | Effect |
+|:---|:---|:---|
+| `big.mark` | `","` | Thousands separator for row numbers, and for the row count in `str()` |
+| `color` | `TRUE` | Colour the class row |
+| `class_colors` | `NULL` | Named vector mapping class tokens (`"<num>"`) to `cli` colour helpers (`"col_cyan"`) |
+| `show_ncol` | `TRUE` | Print `ncol: <n>` above the table |
+| `color_group_values` | `TRUE` | In grouped output, colour the values within each group |
+| `group_value_mode` | `"distinct"` | How values are coloured: `"distinct"` or `"similarity"` (see [Colour modes](#colour-modes)) |
+| `similarity_max_distance`, `similarity_max_relative` | `2`, `0.30` | Thresholds for `"similarity"` mode |
+| `force_color` | `TRUE` | Emit colour even where `cli` would not, by setting `cli.num_colors = 256` while printing |
+| `group_sep_fmt` | `"--------- Group: %s"` | `sprintf()` format for the separator line above each group |
+
+For example, your own colours for the class row, and no `ncol:` line:
+
+```{r}
+enable_dt_print_thousands(
+  class_colors = c("<num>" = "col_cyan", "<char>" = "col_yellow", "<fctr>" = "col_magenta"),
+  show_ncol = FALSE
+)
+DT[1:3]
+```
+
+```{r}
+#| include: false
+enable_dt_print_thousands()
+```
+
+`disable_dt_print_thousands()` removes the mask and goes back to plain `data.table` printing.
+
+## Grouped sampling {#grouped-sampling}
+
+`sample_dt()` has two modes.
+
+**Without `group`** it samples `n` rows:
+
+```{r}
+sample_dt(DT, n = 4)
+```
+
+**With `group`** it samples `n` *groups* and returns every row of each chosen group, sorted by group. That keeps whole cohorts together, which is what you want when reviewing sampled records rather than sampled rows. `group` can be a bare column name or a string.
+
+```{r}
+sample_dt(DT, n = 2, group = Species)
+```
+
+Each group gets a separator line, and within a group repeated values share a colour, so a value that differs from its neighbours stands out.
+
+### Ordering by commonality
+
+With `sort_coverage = TRUE` (the default), rows within each group are ordered by how common their values are: rows sharing the most values with the rest of the group come first. Here the `Kyle Haynes` rows are the group's common pattern; the others are variations.
+
+```{r}
+cohort <- data.table(
+  cohort_id  = c(1, 1, 1, 1, 1, 2, 2, 2),
+  given_name = c("Kyle", "Cyle", "Kyle", "Kylie", "Kyle", "Sarah", "Sara", "Sarah"),
+  last_name  = c("Haynes", "Hines", "Haynes", "Hines", "Haynes", "Smith", "Smyth", "Smith")
+)
+
+sample_dt(cohort, n = 2, group = cohort_id, sort_coverage = FALSE)
+```
+
+```{r}
+sample_dt(cohort, n = 2, group = cohort_id, sort_coverage = TRUE)
+```
+
+### Other arguments
+
+| Argument | Default | Effect |
+|:---|:---|:---|
+| `color` | session default (`TRUE`) | Colour the output. `FALSE` gives plain output. |
+| `sort_coverage` | `TRUE` | Order rows by commonality within each group (needs `group`) |
+| `color_threshold` | `500L` | If any group has more rows than this, colour is switched off for the result |
+
+## Colouring a table without sampling: `cdt()` {#cdt}
+
+`cdt()` applies the same display treatment to a table you already have, with no sampling. Without `group` the whole table is one display unit and prints compactly, like any long table (the five middle rows are left out here). With `group` you get the separators and per-group colours, and every row is printed.
+
+```{r}
+cdt(DT)
+```
+
+```{r}
+cdt(DT, group = Species)
+```
+
+`cdt()` takes the same `color`, `sort_coverage` and `color_threshold` arguments as `sample_dt()`. Because grouped output prints every row, narrow a large table before you group it.
+
+## Highlighting rows {#highlight}
+
+`highlight_dt()` colours entire rows that match a condition, so anomalies show up in ordinary console output. The condition is evaluated inside the table (or is a logical vector as long as the table). `color` names a `cli` colour helper, `"col_red"` by default; `"red"` works too.
+
+```{r}
+highlight_dt(DT, Sepal.Length > 6.5)
+```
+
+```{r}
+highlight_dt(DT, Species == "setosa", color = "col_cyan")
+```
+
+::: {.callout-note}
+`data.table` prints only the first and last few rows of a long table, and highlighting can only colour rows that are printed. To make sure the rows you care about are on screen, filter first or raise `options(datatable.print.topn)`.
+:::
+
+## Colour modes {#colour-modes}
+
+In grouped output, values are coloured within each group and column. There are two ways to decide which values share a colour:
+
+- **distinct** (the default): every distinct value gets its own colour, so equal values match and any difference shows.
+- **similarity**: strings that are close to each other share a colour, which makes typos and near-duplicates easy to see. Two values are close when their edit distance is at most `similarity_max_distance`, or at most `similarity_max_relative` of the longer value's length, ignoring case and punctuation.
+
+A mode stored on a table wins over the session setting, and `sample_dt()`, `cdt()` and `dupe_dt()` store `"distinct"` on their results. So `group_value_mode = "similarity"` does not change how the output of those three prints; see [Limitations](limitations.qmd#colour-mode).
+
+## Switching colour on and off {#colour-default}
+
+`switch_col()` sets the session default for the `color` argument of `sample_dt()`, `cdt()` and `dupe_dt()`:
+
+```{r}
+switch_col(FALSE)
+sample_dt(DT, n = 3)
+```
+
+```{r}
+switch_col(TRUE)
+```
+
+Pass `color = TRUE` or `color = FALSE` to a single call to override the default just once.
+
+## `str()` and `dput()` {#str-dput}
+
+`enable_dt_str_mask()` gives `str()` a data.table-shaped header, shows every column, and drops the `.internal.selfref` line. Other objects go to the usual `str()` untouched.
+
+```{r}
+str(DT)
+```
+
+`enable_dt_dput_mask()` removes the `.internal.selfref` pointer from `dput()` output, so what you paste into an issue or a script runs as it is:
+
+```{r}
+dput(DT[1:2])
+```
+
+Without the masks:
+
+```{r}
+disable_dt_str_mask()
+disable_dt_dput_mask()
+str(DT)
+dput(DT[1:2])
+```
+
+```{r}
+turn_everyone_on()
+```
+
+## All the switches {#switches}
+
+| Function | What it does |
+|:---|:---|
+| `turn_everyone_on()` | Turns on the print, `str()` and `dput()` masks, and colour for `sample_dt()`, `cdt()` and `dupe_dt()` |
+| `enable_dt_print_thousands()`, `disable_dt_print_thousands()` | The print mask |
+| `enable_dt_str_mask()`, `disable_dt_str_mask()` | The `str()` mask |
+| `enable_dt_dput_mask()`, `disable_dt_dput_mask()` | The `dput()` mask |
+| `switch_col()` | The session default for colour in `sample_dt()`, `cdt()` and `dupe_dt()` |
+
+The masks live in your global environment; see [Get started](getting-started.qmd#attaching-the-package).

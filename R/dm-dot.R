@@ -3,11 +3,11 @@
 #' A port of datamodelr's `dm_create_graph()`: each table becomes a
 #' `plaintext` node whose label is an HTML table of its columns, primary keys
 #' underlined, and each reference becomes an edge. Segments
-#' ([duckdt_dm_set_segment()]) become labelled clusters, and displays
-#' ([duckdt_dm_set_display()]) pick the colours.
+#' ([dbdt_dm_set_segment()]) become labelled clusters, and displays
+#' ([dbdt_dm_set_display()]) pick the colours.
 #'
-#' @param dm A `"duckdt_data_model"` from [duckdt_data_model()], or anything
-#'   [duckdt_data_model()] accepts (a connection, a `"duckdt"` handle, a
+#' @param dm A `"duckdt_data_model"` from [dbdt_data_model()], or anything
+#'   [dbdt_data_model()] accepts (a connection, a `"duckdt"` handle, a
 #'   named list of data frames).
 #' @param view How much of each table to draw: `"all"` columns,
 #'   `"keys_only"` (primary and foreign keys), or `"title_only"` (just the
@@ -25,16 +25,16 @@
 #' @return A length-1 character vector of DOT source, with class
 #'   `"duckdt_dot"` so printing it shows the diagram (via `DiagrammeR`, if
 #'   installed) rather than the source text. Use [cat()] to see the source.
-#' @seealso [duckdt_dm_render()] to get a widget object directly,
-#'   [duckdt_dm_export()] to write an image file, [duckdt_erd()] for the
+#' @seealso [dbdt_dm_render()] to get a widget object directly,
+#'   [dbdt_dm_export()] to write an image file, [dbdt_erd()] for the
 #'   dependency-free browser version.
 #' @examples
-#' dm <- duckdt_data_model(list(
+#' dm <- dbdt_data_model(list(
 #'   orders = data.frame(id = 1L, customer_id = 1L),
 #'   customers = data.frame(id = 1L, name = "a")
 #' ))
-#' dm <- duckdt_dm_add_references(dm, orders$customer_id == customers$id)
-#' cat(substr(duckdt_dm_dot(dm), 1, 60))
+#' dm <- dbdt_dm_add_references(dm, orders$customer_id == customers$id)
+#' cat(substr(dbdt_dm_dot(dm), 1, 60))
 #' @export
 duckdt_dm_dot <- function(dm, view = c("all", "keys_only", "title_only"),
                           col_attr = "column", rankdir = "BT",
@@ -112,20 +112,20 @@ print.duckdt_dot <- function(x, ...) {
 #'
 #' Turns the model into an `htmlwidget` that draws in the RStudio viewer, an
 #' Rmd/Quarto document or a Shiny app. Requires the `DiagrammeR` package;
-#' [duckdt_erd()] needs nothing extra and is interactive, so prefer it for
+#' [dbdt_erd()] needs nothing extra and is interactive, so prefer it for
 #' exploring, and this for embedding.
 #'
-#' @param dm A `"duckdt_data_model"`, or anything [duckdt_data_model()]
+#' @param dm A `"duckdt_data_model"`, or anything [dbdt_data_model()]
 #'   accepts.
 #' @param width,height Optional widget size, in pixels.
-#' @param ... Passed to [duckdt_dm_dot()], e.g. `view`, `rankdir`,
+#' @param ... Passed to [dbdt_dm_dot()], e.g. `view`, `rankdir`,
 #'   `col_attr`.
 #'
 #' @return A `DiagrammeR` `grViz` htmlwidget.
 #' @examples
 #' \dontrun{
-#' con <- duckdt_connect("my_database.duckdb")
-#' duckdt_dm_render(con, view = "keys_only", rankdir = "LR")
+#' con <- dbdt_connect("my_database.duckdb")
+#' dbdt_dm_render(con, view = "keys_only", rankdir = "LR")
 #' }
 #' @export
 duckdt_dm_render <- function(dm, width = NULL, height = NULL, ...) {
@@ -142,18 +142,18 @@ duckdt_dm_render <- function(dm, width = NULL, height = NULL, ...) {
 #' Writes the Graphviz rendering to SVG, PNG, PDF or PostScript. Needs the
 #' `DiagrammeR`, `DiagrammeRsvg` and (for anything but SVG) `rsvg` packages.
 #'
-#' @param dm A `"duckdt_data_model"`, or anything [duckdt_data_model()]
+#' @param dm A `"duckdt_data_model"`, or anything [dbdt_data_model()]
 #'   accepts.
 #' @param file Output file. The extension picks the format unless `type` is
 #'   given.
 #' @param type One of `"svg"`, `"png"`, `"pdf"`, `"ps"`.
 #' @param width,height Output size in pixels (not used for SVG).
-#' @param ... Passed to [duckdt_dm_dot()].
+#' @param ... Passed to [dbdt_dm_dot()].
 #'
 #' @return Invisibly, the path written.
 #' @examples
 #' \dontrun{
-#' duckdt_dm_export(con, "schema.png", view = "keys_only")
+#' dbdt_dm_export(con, "schema.png", view = "keys_only")
 #' }
 #' @export
 duckdt_dm_export <- function(dm, file, type = NULL, width = NULL, height = NULL, ...) {
@@ -185,7 +185,7 @@ duckdt_dm_export <- function(dm, file, type = NULL, width = NULL, height = NULL,
 #' Colour schemes for data model diagrams
 #'
 #' Ported from datamodelr. A palette is four colours; a scheme is a named
-#' list of palettes, and [duckdt_dm_set_display()] picks one per table by
+#' list of palettes, and [dbdt_dm_set_display()] picks one per table by
 #' name. The built-in scheme provides `"default"` plus `"accent1"` ...
 #' `"accent7"` and border-less `"accent1nb"` ... `"accent7nb"`.
 #'
@@ -193,21 +193,21 @@ duckdt_dm_export <- function(dm, file, type = NULL, width = NULL, height = NULL,
 #' @param header_bgcolor Table header background colour.
 #' @param header_font Table header font colour.
 #' @param bgcolor Table body background colour.
-#' @param ... Named palettes, for `duckdt_dm_color_scheme()`.
-#' @param color_scheme A scheme from `duckdt_dm_color_scheme()`.
+#' @param ... Named palettes, for `dbdt_dm_color_scheme()`.
+#' @param color_scheme A scheme from `dbdt_dm_color_scheme()`.
 #'
-#' @return `duckdt_dm_palette()` a palette; `duckdt_dm_color_scheme()` a
-#'   scheme; `duckdt_dm_get_color_scheme()` the scheme currently in use;
-#'   `duckdt_dm_add_colors()` and `duckdt_dm_set_color_scheme()` invisibly
+#' @return `dbdt_dm_palette()` a palette; `dbdt_dm_color_scheme()` a
+#'   scheme; `dbdt_dm_get_color_scheme()` the scheme currently in use;
+#'   `dbdt_dm_add_colors()` and `dbdt_dm_set_color_scheme()` invisibly
 #'   the new scheme (they set the `duckdt.dm_scheme` option).
 #' @examples
-#' duckdt_dm_add_colors(duckdt_dm_color_scheme(
-#'   fresh = duckdt_dm_palette(
+#' dbdt_dm_add_colors(dbdt_dm_color_scheme(
+#'   fresh = dbdt_dm_palette(
 #'     line_color = "#1a7f64", header_bgcolor = "#22a37f",
 #'     header_font = "#FFFFFF", bgcolor = "#E6F5F0"
 #'   )
 #' ))
-#' names(duckdt_dm_get_color_scheme())
+#' names(dbdt_dm_get_color_scheme())
 #' @export
 duckdt_dm_palette <- function(line_color = NULL, header_bgcolor, header_font, bgcolor) {
   list(

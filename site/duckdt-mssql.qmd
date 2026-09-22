@@ -1,0 +1,68 @@
+---
+title: "MS SQL Server"
+description: "Use the same [i, j, by] interface against a Microsoft SQL Server connection, and what differs from DuckDB."
+---
+
+`dbdt()` also works against a Microsoft SQL Server connection, for example one from `DBI::dbConnect(odbc::odbc(), ...)`. The dialect is detected from the connection object, since `odbc` tags a SQL Server connection with the class `"Microsoft SQL Server"`, so there is no extra argument to pass.
+
+```r
+con <- DBI::dbConnect(odbc::odbc(), driver = "ODBC Driver 18 for SQL Server", ...)
+
+d <- dbdt(con, "existing_table")
+d[cyl == 6, .(avg_hp = mean(hp), n = .N), by = cyl]
+```
+
+::: {.callout-note}
+## These examples are not run
+There is no SQL Server to connect to when these docs are built, so the code on this page is shown, not executed. The package's SQL Server code paths are tested by checking the T-SQL they emit against a recording fake connection; they are not yet exercised against a live server in the test suite. Treat SQL Server support as young, and check the SQL Server rows of the table below before relying on a feature.
+:::
+
+## Fast exploration
+
+```r
+dbdt_tables(con)
+dbdt_schema(con, table = "existing_table")
+head(d, 100)
+dbdt_sample(d, 100, method = "fast")
+print(d)                 # skips the full row count; displays ? for the total
+print(d, count = TRUE)   # opt into an exact count
+```
+
+The default `dbdt_sample(d, n)` uses `ORDER BY NEWID()` across the entire
+table. `method = "fast"` first samples pages with `TABLESAMPLE SYSTEM`, then
+randomizes those rows and returns at most `n`. This may return fewer rows or
+zero, and it is not a uniform row sample: rows on the same page are selected
+together. It requires a local base table; use `head()` to preview a view, or
+the default sampling method when you need an exact random sample.
+`nrow()`, `dim()` and `tail()` still count all rows.
+
+## What is the same
+
+Everything that translates `i`, `j` and `by`: comparisons, `&`, `|` and `!`, `%in%` and `%chin%`, `%between%`, `is.na()`, arithmetic, and most scalar and aggregate functions. [Query](duckdt-query.qmd) applies unchanged. So does everything that reads the catalogue: `dbdt_tables()`, `dbdt_schema()`, `dbdt_relationships()`, `dbdt_erd()` and the [data model](duckdt-explore.qmd), which use `information_schema` and, for foreign keys, SQL Server's `sys.foreign_key_columns` catalogue view (so compound keys pair their columns exactly).
+
+## What is dialect-specific
+
+| Feature | DuckDB | SQL Server |
+|:---|:---|:---|
+| `head()` and `print()` | `LIMIT n` | `TOP (n)` |
+| `tail()` | `LIMIT n OFFSET k` | `ORDER BY (SELECT NULL) OFFSET k ROWS FETCH NEXT n ROWS ONLY` |
+| `dbdt_sample()` | `USING SAMPLE reservoir(n ROWS)` | `ORDER BY NEWID()` by default; `method = "fast"` uses approximate page sampling with `TABLESAMPLE SYSTEM` first. |
+| `%flike%` (literal substring) | `contains()` | `CHARINDEX(...) > 0` |
+| `%like%`, `%ilike%`, `%plike%` (regular expressions) | `regexp_matches()` | `REGEXP_LIKE()`, which needs SQL Server 2025 (or Azure SQL Database, Managed Instance or Fabric SQL DB) and database compatibility level 170 or higher. On an older server it surfaces as a plain "not a recognized built-in function name" error from the server. |
+| `median()` | `median()` | `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ...)`. T-SQL requires an `OVER` clause on `PERCENTILE_CONT`, so `median()` is not reliable against SQL Server yet. |
+| `sd()`, `var()`, `nchar()` | `stddev()`, `variance()`, `length()` | `stdev()`, `var()`, `len()` |
+| Logical literals | `TRUE`, `FALSE` | `1`, `0` |
+| [`:=`](duckdt-join-write.qmd#write) | `CREATE OR REPLACE TABLE ... AS SELECT` | `SELECT ... INTO` a new table, then `sp_rename`, in a transaction. Not a true atomic replace: permissions and triggers on the original table are not preserved. |
+| [`dbdt_merge()`](duckdt-join-write.qmd#merge) | `UPDATE ... FROM`, an anti-join `INSERT` and `DELETE`, in a transaction | One native `MERGE INTO ... USING ... ON (...) WHEN MATCHED ...` statement |
+| [`dbdt_temp()`](duckdt-join-write.qmd#temp) | `CREATE OR REPLACE TEMP TABLE`, gone when the connection closes | `SELECT ... INTO` an *ordinary* table on the current schema, which outlives the session. Drop it with `dbdt_drop()`. |
+| [`dbdt_join()`](duckdt-join-write.qmd#join) | `INNER`, `LEFT`, `RIGHT`, `FULL OUTER JOIN` | The same; these are standard SQL |
+| Binary columns | `BLOB`, `BIT` | `binary`, `varbinary`, `image`, and `timestamp` and `rowversion`, which are binary underneath. Left out of results, with a note. |
+
+If `by` is omitted, `dbdt_merge()` defaults to every column `x` and `y` share, on SQL Server as on DuckDB; pass `by =` explicitly whenever `y` carries value columns that should be updated rather than matched on.
+
+## What is not supported
+
+- **Zero-copy `as.dbdt(x)`.** Registering an R data frame as a view with no copy is a DuckDB mechanism. Against SQL Server, use `as.dbdt(x, copy = TRUE)`.
+- **`dbdt_csv()` and `dbdt_parquet()`.** They are built on DuckDB's `read_csv_auto` and `read_parquet` and stay DuckDB-only.
+- **List-columns.**
+- **`limit` in `dbdt_dm_query()`.** It appends a `LIMIT` clause, which T-SQL does not have. Leave `limit` unset for SQL Server, or add `TOP` yourself.

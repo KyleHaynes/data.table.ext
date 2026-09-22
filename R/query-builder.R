@@ -2,7 +2,7 @@
 #'
 #' Given the tables (and columns) you want, this works out how to join them
 #' from the model's references and writes the SQL -- the same query the
-#' [duckdt_erd()] page and [duckdt_explorer()] show you as you tick boxes,
+#' [dbdt_erd()] page and [dbdt_explorer()] show you as you tick boxes,
 #' available on its own so you can run or edit it.
 #'
 #' Tables are joined (with `LEFT JOIN`) along the references in the model,
@@ -11,8 +11,8 @@
 #' clause and reported in the `"unjoined"` attribute, rather than silently
 #' becoming a cross join.
 #'
-#' @param dm A `"duckdt_data_model"` from [duckdt_data_model()], or anything
-#'   [duckdt_data_model()] accepts.
+#' @param dm A `"duckdt_data_model"` from [dbdt_data_model()], or anything
+#'   [dbdt_data_model()] accepts.
 #' @param tables Character vector of tables to select from. The first is the
 #'   one everything else joins to.
 #' @param columns Optionally, a named list mapping table name to the columns
@@ -25,12 +25,12 @@
 #' @return A length-1 character vector of SQL, with the tables that could not
 #'   be joined in its `"unjoined"` attribute.
 #' @examples
-#' dm <- duckdt_data_model(list(
+#' dm <- dbdt_data_model(list(
 #'   orders = data.frame(id = 1L, customer_id = 1L, total = 1),
 #'   customers = data.frame(id = 1L, name = "a")
 #' ))
-#' dm <- duckdt_dm_add_references(dm, orders$customer_id == customers$id)
-#' cat(duckdt_dm_query(dm, c("orders", "customers"),
+#' dm <- dbdt_dm_add_references(dm, orders$customer_id == customers$id)
+#' cat(dbdt_dm_query(dm, c("orders", "customers"),
 #'                     columns = list(orders = "total", customers = "name")))
 #' @export
 duckdt_dm_query <- function(dm, tables, columns = NULL, where = NULL, limit = NULL) {

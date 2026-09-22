@@ -16,7 +16,7 @@ A \code{data.table}.
 }
 \description{
 Runs \verb{SELECT * FROM <table>} and materializes the result in R. This is
-the counterpart to \code{\link[=as.duckdt]{as.duckdt()}}.
+the counterpart to \code{\link[=as.dbdt]{as.dbdt()}}.
 }
 \details{
 Binary columns (\code{BLOB}/\code{BIT} on DuckDB, \code{varbinary}/\code{binary}/\code{image} on

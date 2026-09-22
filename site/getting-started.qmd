@@ -1,0 +1,109 @@
+---
+title: "Get started"
+description: "Install the package, see what attaching it changes, and take a first step in each half."
+---
+
+```{r}
+#| include: false
+source("_setup.R")
+```
+
+## Install
+
+```r
+# From GitHub
+devtools::install_github("KyleHaynes/data.table.ext")
+
+# Or from a local checkout
+install.packages(".", repos = NULL, type = "source")
+```
+
+### Optional packages {#optional-packages}
+
+`data.table`, `cli`, `DBI` and `duckdb` are required and installed with the package. Everything else is only needed for the feature named:
+
+| Package | Needed for |
+|:---|:---|
+| `DiagrammeR` | `dbdt_dm_render()`, and printing the result of `dbdt_dm_dot()` |
+| `DiagrammeRsvg`, `rsvg` | `dbdt_dm_export()` to image files (`rsvg` is needed for anything but SVG) |
+| `shiny` | `dbdt_explorer()` |
+| `DT` | the row preview in `dbdt_explorer()` |
+| `odbc` (or another DBI driver) | querying [MS SQL Server](duckdt-mssql.qmd) |
+
+`dbdt_erd()` needs none of them.
+
+## Attaching the package
+
+```{r}
+#| include: false
+detach("package:data.table.ext", unload = TRUE)
+options(duckdt.quiet = FALSE)
+```
+
+```{r}
+library(data.table.ext)
+```
+
+```{r}
+#| include: false
+options(duckdt.quiet = TRUE)
+```
+
+The banner is the package's function index, grouped by theme: the top level is the two halves of the package, the next level is what the functions are for. [The reference](reference.qmd) has the same grouping with a line on each function.
+
+Attaching also switches on four display enhancements by running `turn_everyone_on()`:
+
+| What changes | What you see | Undo with |
+|:---|:---|:---|
+| `print()` of a `data.table` | Thousands separators in row numbers, coloured class row, an `ncol:` header, separators between groups | `disable_dt_print_thousands()` |
+| `str()` of a `data.table` | A compact `# A 'data.table': 150 rows, 5 variables.` header, no `.internal.selfref` line | `disable_dt_str_mask()` |
+| `dput()` of a `data.table` | No `.internal.selfref` noise, so the output can be pasted and run | `disable_dt_dput_mask()` |
+| `sample_dt()`, `cdt()`, `dupe_dt()` | Colour-coded output by default | `switch_col(FALSE)` |
+
+Call `turn_everyone_on()` at any time to put all four back.
+
+::: {.callout-note}
+## The masks live in your global environment
+`print.data.table`, `str` and `dput` are defined in the global environment, so they apply to code you run at the console or in a script, and not to code inside other packages. If you have your own `print.data.table`, `str` or `dput` there, attaching replaces it, and the `disable_*()` functions remove whatever is defined.
+:::
+
+### Hiding the banner
+
+Set the option before the package is attached, for example in your `.Rprofile`. The enhancements are still switched on; only the banner is skipped.
+
+```r
+options(duckdt.quiet = TRUE)
+library(data.table.ext)
+```
+
+`suppressPackageStartupMessages(library(data.table.ext))` works too, because the whole banner is one startup message.
+
+## First steps
+
+### Display
+
+```{r}
+DT <- as.data.table(iris)[c(1:5, 51:55, 101:105)]
+sample_dt(DT, n = 2, group = Species)
+```
+
+```{r}
+str(DT)
+```
+
+More in [Printing & sampling](display.qmd) and [Data checks & helpers](checks.qmd).
+
+### DuckDB
+
+```{r}
+con <- dbdt_example()
+d <- dbdt(con, "orders")
+d[customer_id == 1]
+```
+
+```{r}
+#| include: false
+dbdt_disconnect(con)
+```
+
+`d[i, j, by]` ran as one SQL query and returned a `data.table`. Start with [Connect & load](duckdt-connect.qmd).

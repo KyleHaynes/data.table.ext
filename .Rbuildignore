@@ -5,4 +5,5 @@
 ^\.github$
 ^benchmarks$
 ^R_REVIEW\.md$
+^site$
 ^inst/slides/.*\.html$
