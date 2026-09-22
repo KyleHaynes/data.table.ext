@@ -32,6 +32,10 @@
 #'   `"--------- Group: \%s"`.
 #'
 #' @return Invisibly returns `TRUE`.
+#' @examples
+#' enable_dt_print_thousands()
+#' data.table::as.data.table(iris)
+#' disable_dt_print_thousands()
 #' @export
 enable_dt_print_thousands <- function(
     big.mark = ",",
@@ -192,6 +196,9 @@ enable_dt_print_thousands <- function(
 #' dispatch behavior from attached packages.
 #'
 #' @return Invisibly returns `TRUE`.
+#' @examples
+#' enable_dt_print_thousands()
+#' disable_dt_print_thousands() # back to plain data.table printing
 #' @export
 disable_dt_print_thousands <- function() {
     if (exists("print.data.table", envir = .GlobalEnv, inherits = FALSE)) {

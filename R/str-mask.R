@@ -13,6 +13,11 @@
 #'   printed row count in the first line.
 #'
 #' @return Invisibly returns `TRUE`.
+#' @examples
+#' enable_dt_str_mask()
+#' DT <- data.table::as.data.table(iris)
+#' str(DT)
+#' disable_dt_str_mask()
 #' @export
 enable_dt_str_mask <- function(big.mark = ",") {
     original <- get("str", envir = asNamespace("utils"))
@@ -68,6 +73,9 @@ enable_dt_str_mask <- function(big.mark = ",") {
 #' normally again.
 #'
 #' @return Invisibly returns `TRUE`.
+#' @examples
+#' enable_dt_str_mask()
+#' disable_dt_str_mask() # back to utils::str
 #' @export
 disable_dt_str_mask <- function() {
     if (exists("str", envir = .GlobalEnv, inherits = FALSE)) {

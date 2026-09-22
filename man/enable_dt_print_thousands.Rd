@@ -62,3 +62,8 @@ the printed output to add thousands separators in row indices, preserve
 alignment, optionally color class tokens (for example \verb{<num>}), and
 optionally prepend a column-count header.
 }
+\examples{
+enable_dt_print_thousands()
+data.table::as.data.table(iris)
+disable_dt_print_thousands()
+}

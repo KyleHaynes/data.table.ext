@@ -45,3 +45,9 @@ itself, every element within one list-column must coerce to a single
 atomic type. List-columns are not supported against MS SQL Server
 connections.
 }
+\examples{
+d <- as.dbdt(datasets::mtcars) # zero-copy view
+d
+d2 <- as.dbdt(datasets::mtcars, copy = TRUE) # physically written, writable
+d2
+}

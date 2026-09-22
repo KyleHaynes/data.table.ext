@@ -48,3 +48,8 @@ grouped-print separators when used with \code{enable_dt_print_thousands()}.
 When \code{sort_coverage = TRUE} (default), rows are sorted by value commonality
 (most frequent values first) within each selected group.
 }
+\examples{
+DT <- data.table::as.data.table(iris)
+sample_dt(DT, n = 3)
+sample_dt(DT, n = 2, group = Species)
+}

@@ -1,4 +1,7 @@
 #' @keywords internal
+#' @examples
+#' DT <- data.table::as.data.table(iris)
+#' sample_dt(DT, n = 2, group = Species)
 "_PACKAGE"
 
 # Columns referenced via data.table's NSE (`:=`, `by =`) inside package

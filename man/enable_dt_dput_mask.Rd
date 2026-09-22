@@ -17,3 +17,9 @@ the \code{.internal.selfref} attribute before delegating to the original
 \details{
 Non-\code{data.table} inputs are delegated unchanged.
 }
+\examples{
+enable_dt_dput_mask()
+DT <- data.table::data.table(x = 1:2)
+dput(DT[1:2]) # no .internal.selfref noise
+disable_dt_dput_mask()
+}

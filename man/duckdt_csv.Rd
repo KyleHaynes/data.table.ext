@@ -30,3 +30,9 @@ DuckDB, \code{fread}-style ergonomics included. This is inherently DuckDB-only
 (there's no MS SQL Server equivalent of \code{read_csv_auto}); the resulting
 \code{"duckdt"} handle can still be pointed at from a DuckDB connection only.
 }
+\examples{
+tmp <- tempfile(fileext = ".csv")
+data.table::fwrite(datasets::iris, tmp)
+v <- dbdt_csv(tmp)
+v[, .N, by = Species]
+}

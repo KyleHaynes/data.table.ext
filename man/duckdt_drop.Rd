@@ -28,3 +28,8 @@ that persist). This drops one.
 As a guard against dropping real data, this refuses handles that
 \code{\link[=dbdt_temp]{dbdt_temp()}} did not create unless you pass \code{force = TRUE}.
 }
+\examples{
+d <- as.dbdt(datasets::mtcars)
+sixes <- dbdt_temp(d, cyl == 6)
+dbdt_drop(sixes)
+}

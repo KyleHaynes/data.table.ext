@@ -26,3 +26,8 @@ Evaluates \code{condition} in the context of \code{dt} and tags matching rows so
 printed. Useful for surfacing anomalies (outliers, QA failures, rows of
 interest) directly in normal console output.
 }
+\examples{
+DT <- data.table::as.data.table(iris)
+highlight_dt(DT, Sepal.Length > 7)
+highlight_dt(DT, Species == "setosa", color = "col_cyan")
+}

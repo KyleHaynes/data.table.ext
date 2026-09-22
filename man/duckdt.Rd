@@ -58,3 +58,11 @@ Use \code{dbdt()}, \code{as.dbdt()} and \verb{dbdt_*()} for new code. The origin
 and \verb{duckdt.*} options are retained for compatibility. \code{\link[=dbdt_connect]{dbdt_connect()}}
 opens DuckDB; use a \code{DBI}/\code{odbc} connection for SQL Server.
 }
+\examples{
+con <- dbdt_connect(quiet = TRUE)
+DBI::dbExecute(con, "CREATE TABLE t (id INTEGER, x DOUBLE)")
+DBI::dbExecute(con, "INSERT INTO t VALUES (1, 10), (2, 20)")
+d <- dbdt(con, "t")
+d
+dbdt_disconnect(con)
+}

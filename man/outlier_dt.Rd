@@ -29,3 +29,8 @@ Flags rows where any of \code{cols} (numeric columns) is an outlier under the
 chosen \code{method}, returning only the flagged rows plus an \code{outlier_cols}
 column listing which column(s) triggered the flag.
 }
+\examples{
+DT <- data.table::as.data.table(iris)
+outlier_dt(DT)
+outlier_dt(DT, cols = "Sepal.Width", method = "zscore", threshold = 2.5)
+}

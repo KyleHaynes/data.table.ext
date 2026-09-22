@@ -18,6 +18,10 @@
 #' MS SQL Server) are left out of the result: no driver hands them back as an
 #' R vector, and asking for one fails the whole query rather than just that
 #' column.
+#' @examples
+#' d <- as.dbdt(datasets::mtcars)
+#' head(d, 3)
+#' tail(d, 3)
 #' @name duckdt-head-tail
 NULL
 
@@ -95,6 +99,9 @@ duckdt_tail_sql <- function(qtbl, n, off, dialect, sel = "*") {
 #'   methods use reservoir sampling.
 #'
 #' @return A `data.table` of at most `n` sampled rows.
+#' @examples
+#' d <- as.dbdt(datasets::mtcars)
+#' dbdt_sample(d, 5)
 #' @export
 duckdt_sample <- function(x, n, method = c("random", "fast")) {
   method <- match.arg(method)

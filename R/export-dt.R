@@ -7,6 +7,9 @@
 #' @param n Maximum number of rows to render. Default `Inf` (all rows).
 #'
 #' @return Invisibly returns the character scalar that was printed.
+#' @examples
+#' DT <- data.table::as.data.table(iris)[1:3]
+#' md_dt(DT)
 #' @export
 md_dt <- function(dt, n = Inf) {
     if (!data.table::is.data.table(dt)) {
@@ -32,6 +35,10 @@ md_dt <- function(dt, n = Inf) {
 #'   elsewhere.
 #'
 #' @return Invisibly returns the character scalar that was copied.
+#' @examples
+#' DT <- data.table::as.data.table(iris)[1:3]
+#' # clip_fun lets you try this without touching the real clipboard
+#' copy_dt(DT, clip_fun = function(txt) cat("would copy", nchar(txt), "characters\n"))
 #' @export
 copy_dt <- function(dt, n = Inf, clip_fun = .write_clipboard) {
     if (!data.table::is.data.table(dt)) {

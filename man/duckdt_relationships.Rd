@@ -26,3 +26,8 @@ constraints are returned — this does not guess relationships from
 column-naming conventions. If the connected database/version doesn't
 expose these views, returns a zero-row \code{data.table} rather than erroring.
 }
+\examples{
+con <- dbdt_example()
+dbdt_relationships(con)
+dbdt_disconnect(con)
+}

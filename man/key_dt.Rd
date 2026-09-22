@@ -27,3 +27,8 @@ uniquely identifies every row of \code{dt}, useful for spotting a natural key
 before a join. Reports only minimal candidates: a combination is skipped
 if a smaller already-found candidate is a subset of it.
 }
+\examples{
+DT <- data.table::as.data.table(iris)
+DT[, id := .I]
+key_dt(DT)
+}

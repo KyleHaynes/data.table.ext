@@ -30,6 +30,11 @@
 #' @param ... Unused.
 #'
 #' @return A `data.table` (or, for `:=`, the input `x` invisibly).
+#' @examples
+#' d <- as.dbdt(datasets::mtcars)
+#' d[cyl == 6]
+#' d[cyl == 6, .(mpg, hp)]
+#' d[, .(avg_mpg = mean(mpg), n = .N), by = cyl]
 #' @export
 `[.duckdt` <- function(x, i, j, by, ...) {
   has_i <- !missing(i)

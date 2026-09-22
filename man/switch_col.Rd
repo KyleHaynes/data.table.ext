@@ -16,3 +16,7 @@ Invisibly returns the new default.
 \description{
 Sets the session default used by \code{sample_dt()} when \code{color} is not supplied.
 }
+\examples{
+switch_col(FALSE) # sample_dt()/cdt()/dupe_dt() default to plain output
+switch_col(TRUE) # back to colored by default
+}

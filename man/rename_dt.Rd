@@ -20,3 +20,8 @@ Invisibly returns \code{dt} (modified by reference).
 Thin wrapper over \code{data.table::setnames()} that accepts a named character
 vector mapping old names to new names, modifying the table by reference.
 }
+\examples{
+DT <- data.table::as.data.table(iris)
+rename_dt(DT, c(sepal_length = "Sepal.Length"))
+names(DT)
+}

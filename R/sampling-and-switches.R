@@ -6,6 +6,9 @@
 #'   If `FALSE`, sample_dt defaults to plain output.
 #'
 #' @return Invisibly returns the new default.
+#' @examples
+#' switch_col(FALSE) # sample_dt()/cdt()/dupe_dt() default to plain output
+#' switch_col(TRUE) # back to colored by default
 #' @import data.table
 #' @export
 switch_col <- function(on = TRUE) {
@@ -26,6 +29,10 @@ switch_col <- function(on = TRUE) {
 #' @param cols Character vector of column names to remove.
 #'
 #' @return Invisibly returns the modified `x`.
+#' @examples
+#' DT <- data.table::data.table(x = 1:3, y = 4:6, z = 7:9)
+#' set_null(DT, c("y", "z"))
+#' names(DT)
 #' @export
 set_null <- function(x, cols) {
     if (!data.table::is.data.table(x)) {
@@ -107,6 +114,10 @@ set_null <- function(x, cols) {
 #'
 #' @return The value of the evaluated expression, or a selected data.table when
 #'   the result is a column selector.
+#' @examples
+#' DT <- data.table::as.data.table(iris)
+#' DT[, e(grep("Sepal", names(DT), value = TRUE))]
+#' DT[, e(1:2)]
 #' @export
 e <- function(expr) {
     expr_call <- substitute(expr)
@@ -220,6 +231,10 @@ e <- function(expr) {
 #' @return A data.table. If `group` is supplied, returned rows include all
 #'   members of selected groups and include print attribute
 #'   `".group_print_column"`.
+#' @examples
+#' DT <- data.table::as.data.table(iris)
+#' sample_dt(DT, n = 3)
+#' sample_dt(DT, n = 2, group = Species)
 #' @export
 sample_dt <- function(dt, n = 10, group = NULL, color = .sample_dt_color_default(), sort_coverage = TRUE, color_threshold = 500L) {
     if (!data.table::is.data.table(dt)) {
@@ -290,6 +305,10 @@ sample_dt <- function(dt, n = 10, group = NULL, color = .sample_dt_color_default
 #'   color output is disabled for the returned table.
 #'
 #' @return A data.table with grouped-print attributes.
+#' @examples
+#' DT <- data.table::as.data.table(iris)
+#' cdt(DT)
+#' cdt(DT, group = Species)
 #' @export
 cdt <- function(dt, group = NULL, color = .sample_dt_color_default(), sort_coverage = TRUE, color_threshold = 500L) {
     if (!data.table::is.data.table(dt)) {
@@ -330,6 +349,10 @@ cdt <- function(dt, group = NULL, color = .sample_dt_color_default(), sort_cover
 #'   automatically).
 #'
 #' @return `dt`, tagged with highlight-print attributes.
+#' @examples
+#' DT <- data.table::as.data.table(iris)
+#' highlight_dt(DT, Sepal.Length > 7)
+#' highlight_dt(DT, Species == "setosa", color = "col_cyan")
 #' @export
 highlight_dt <- function(dt, condition, color = "col_red") {
     if (!data.table::is.data.table(dt)) {
@@ -371,6 +394,10 @@ highlight_dt <- function(dt, condition, color = "col_red") {
 #' @return A data.table of duplicate rows, ordered by cluster, with an added
 #'   `.dupe_group` integer column identifying each cluster. Returns a
 #'   zero-row data.table if no duplicates are found.
+#' @examples
+#' DT <- data.table::data.table(id = c(1, 1, 2, 3), name = c("a", "a", "b", "c"))
+#' dupe_dt(DT)
+#' dupe_dt(DT, by = "id")
 #' @export
 dupe_dt <- function(dt, by = NULL, color = .sample_dt_color_default()) {
     if (!data.table::is.data.table(dt)) {
@@ -421,6 +448,8 @@ dupe_dt <- function(dt, by = NULL, color = .sample_dt_color_default()) {
 #' default for the current session.
 #'
 #' @return Invisibly returns `TRUE`.
+#' @examples
+#' turn_everyone_on()
 #' @export
 turn_everyone_on <- function() {
     switch_col(TRUE)

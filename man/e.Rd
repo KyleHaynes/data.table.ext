@@ -25,3 +25,8 @@ searches up to 10 frames for variables named \code{DT}, \code{dt}, \code{data}, 
 works reliably at the top level and in simple \code{[} calls but may not resolve
 correctly inside deeply nested or non-standard evaluation contexts.
 }
+\examples{
+DT <- data.table::as.data.table(iris)
+DT[, e(grep("Sepal", names(DT), value = TRUE))]
+DT[, e(1:2)]
+}

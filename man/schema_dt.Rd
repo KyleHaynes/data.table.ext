@@ -17,3 +17,7 @@ Returns a data.table with one row per column showing class, number of
 distinct non-NA values, and NA count. Useful for a quick overview of a
 wide table.
 }
+\examples{
+DT <- data.table::as.data.table(iris)
+schema_dt(DT)
+}

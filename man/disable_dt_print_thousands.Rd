@@ -13,3 +13,7 @@ Invisibly returns \code{TRUE}.
 Removes \code{print.data.table} from the global environment, restoring default
 dispatch behavior from attached packages.
 }
+\examples{
+enable_dt_print_thousands()
+disable_dt_print_thousands() # back to plain data.table printing
+}

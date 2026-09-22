@@ -8,6 +8,10 @@
 \description{
 Adds opt-in data.table output enhancements for printing, grouped sampling, and data.table-focused str() and dput() behavior, including helpers for grouped value highlighting and readability improvements. Also provides a data.table-style '[i, j, by]' interface backed by 'DuckDB' and Microsoft SQL Server, translating expressions to SQL and executing them in the database so data stays there until the result is materialized as a data.table. Also reverse-engineers a database into a data model -- tables, columns, keys and references -- and draws it as an interactive entity-relationship diagram that builds the query for the tables and columns you pick.
 }
+\examples{
+DT <- data.table::as.data.table(iris)
+sample_dt(DT, n = 2, group = Species)
+}
 \author{
 \strong{Maintainer}: Kyle Haynes \email{kyle@kylehaynes.com.au}
 

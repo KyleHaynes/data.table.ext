@@ -26,3 +26,8 @@ views (works against both DuckDB and MS SQL Server connections) for every
 table's columns, their SQL data type, and whether each is part of a
 primary key.
 }
+\examples{
+con <- dbdt_example()
+dbdt_schema(con, table = "orders")
+dbdt_disconnect(con)
+}

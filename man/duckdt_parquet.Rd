@@ -26,3 +26,12 @@ A \code{"duckdt"} object (a view, i.e. not writable via \verb{:=}).
 \description{
 Open Parquet file(s) as a duckdt view
 }
+\examples{
+con <- dbdt_connect(quiet = TRUE)
+DBI::dbExecute(con, "CREATE TABLE t AS SELECT * FROM (VALUES (1, 10.0), (2, 20.0)) AS t(id, x)")
+tmp <- tempfile(fileext = ".parquet")
+DBI::dbExecute(con, sprintf("COPY t TO '\%s' (FORMAT PARQUET)", tmp))
+p <- dbdt_parquet(tmp, conn = con)
+p[, .N]
+dbdt_disconnect(con)
+}

@@ -6,6 +6,9 @@
 #' @param dt A data.table.
 #'
 #' @return A data.table with columns `col`, `n_na`, and `pct_na`.
+#' @examples
+#' AQ <- data.table::as.data.table(airquality)
+#' na_dt(AQ)
 #' @export
 na_dt <- function(dt) {
     if (!data.table::is.data.table(dt)) {
@@ -32,6 +35,10 @@ na_dt <- function(dt) {
 #' @param n Maximum number of rows to return. `Inf` returns all.
 #'
 #' @return A data.table with columns matching `col`, `n`, and `pct`.
+#' @examples
+#' DT <- data.table::as.data.table(iris)
+#' freq_dt(DT, Species)
+#' freq_dt(DT, Species, n = 2)
 #' @export
 freq_dt <- function(dt, col, n = 20L) {
     if (!data.table::is.data.table(dt)) {
@@ -67,6 +74,9 @@ freq_dt <- function(dt, col, n = 20L) {
 #' @param dt A data.table.
 #'
 #' @return A data.table with columns `col`, `class`, `n_distinct`, and `n_na`.
+#' @examples
+#' DT <- data.table::as.data.table(iris)
+#' schema_dt(DT)
 #' @export
 schema_dt <- function(dt) {
     if (!data.table::is.data.table(dt)) {
@@ -95,6 +105,10 @@ schema_dt <- function(dt) {
 #'   `c(new_name = "old_name", v2 = "value")`.
 #'
 #' @return Invisibly returns `dt` (modified by reference).
+#' @examples
+#' DT <- data.table::as.data.table(iris)
+#' rename_dt(DT, c(sepal_length = "Sepal.Length"))
+#' names(DT)
 #' @export
 rename_dt <- function(dt, renames) {
     if (!data.table::is.data.table(dt)) {
@@ -124,6 +138,9 @@ rename_dt <- function(dt, renames) {
 #' @param bins Integer number of buckets. Default `10L`.
 #'
 #' @return Invisibly returns a character scalar containing the sparkline.
+#' @examples
+#' DT <- data.table::as.data.table(iris)
+#' spark_dt(DT, Sepal.Length)
 #' @export
 spark_dt <- function(dt, col, bins = 10L) {
     if (!data.table::is.data.table(dt)) {
@@ -197,6 +214,10 @@ spark_dt <- function(dt, col, bins = 10L) {
 #' @return A data.table containing the flagged rows from `dt`, plus an
 #'   `outlier_cols` character column listing which column(s) triggered the
 #'   flag for that row. Returns a zero-row data.table if none are found.
+#' @examples
+#' DT <- data.table::as.data.table(iris)
+#' outlier_dt(DT)
+#' outlier_dt(DT, cols = "Sepal.Width", method = "zscore", threshold = 2.5)
 #' @export
 outlier_dt <- function(dt, cols = NULL, method = c("iqr", "zscore"), threshold = NULL) {
     if (!data.table::is.data.table(dt)) {
@@ -284,6 +305,10 @@ outlier_dt <- function(dt, cols = NULL, method = c("iqr", "zscore"), threshold =
 #' @return A data.table with one row per candidate key found, columns `cols`
 #'   (comma-separated column names) and `n_cols`, ordered by `n_cols`
 #'   ascending. Returns a zero-row data.table if no candidate is found.
+#' @examples
+#' DT <- data.table::as.data.table(iris)
+#' DT[, id := .I]
+#' key_dt(DT)
 #' @export
 key_dt <- function(dt, cols = NULL, max_size = 3L) {
     if (!data.table::is.data.table(dt)) {

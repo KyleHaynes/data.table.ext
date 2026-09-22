@@ -23,3 +23,8 @@ against both DuckDB and MS SQL Server connections. DuckDB's/Postgres's
 internal \code{information_schema}/\code{pg_catalog} compatibility schemas are
 excluded.
 }
+\examples{
+con <- dbdt_example()
+dbdt_tables(con)
+dbdt_disconnect(con)
+}

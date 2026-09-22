@@ -39,6 +39,12 @@
 #'   set `TRUE` for a "replace this subset entirely" merge.
 #'
 #' @return `x`, invisibly.
+#' @examples
+#' cars <- data.table::data.table(car = rownames(datasets::mtcars), datasets::mtcars)
+#' d <- as.dbdt(cars, copy = TRUE)
+#' patch <- data.frame(car = c("Mazda RX4", "New Car"), hp = c(999, 111))
+#' dbdt_merge(d, patch, by = "car") # update matches, insert new rows
+#' d[, .(car, hp)][order(car)]
 #' @export
 duckdt_merge <- function(x, y, by = NULL, update = TRUE, insert = TRUE, delete = FALSE) {
   if (!inherits(x, "duckdt")) {

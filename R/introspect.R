@@ -10,6 +10,10 @@
 #'
 #' @return A `data.table` with one row per table/view: `schema`, `name`,
 #'   `type` (`"BASE TABLE"` or `"VIEW"`).
+#' @examples
+#' con <- dbdt_example()
+#' dbdt_tables(con)
+#' dbdt_disconnect(con)
 #' @export
 duckdt_tables <- function(conn) {
   conn <- duckdt_unwrap_conn(conn)
@@ -39,6 +43,10 @@ duckdt_tables <- function(conn) {
 #'
 #' @return A `data.table` with one row per column: `schema`, `table`,
 #'   `column`, `type`, `ordinal_position`, `primary_key` (logical).
+#' @examples
+#' con <- dbdt_example()
+#' dbdt_schema(con, table = "orders")
+#' dbdt_disconnect(con)
 #' @export
 duckdt_schema <- function(conn, table = NULL) {
   conn <- duckdt_unwrap_conn(conn)
@@ -94,6 +102,10 @@ duckdt_schema <- function(conn, table = NULL) {
 #' @return A `data.table` with one row per foreign-key column: `fk_schema`,
 #'   `fk_table`, `fk_column` (the referencing side) and `pk_schema`,
 #'   `pk_table`, `pk_column` (the referenced side).
+#' @examples
+#' con <- dbdt_example()
+#' dbdt_relationships(con)
+#' dbdt_disconnect(con)
 #' @export
 duckdt_relationships <- function(conn) {
   conn <- duckdt_unwrap_conn(conn)

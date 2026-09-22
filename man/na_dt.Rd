@@ -16,3 +16,7 @@ A data.table with columns \code{col}, \code{n_na}, and \code{pct_na}.
 Returns a data.table with one row per column showing the count and percentage
 of \code{NA} values.
 }
+\examples{
+AQ <- data.table::as.data.table(airquality)
+na_dt(AQ)
+}

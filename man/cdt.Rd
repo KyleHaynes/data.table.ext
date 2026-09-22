@@ -36,3 +36,8 @@ Returns the full table with grouped-print attributes attached so
 If any group exceeds \code{color_threshold}, color output is disabled for that
 result.
 }
+\examples{
+DT <- data.table::as.data.table(iris)
+cdt(DT)
+cdt(DT, group = Species)
+}

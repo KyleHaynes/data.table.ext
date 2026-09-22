@@ -45,3 +45,9 @@ unreadable. Naming one in \code{j} (\code{d[, .(payload)]}) still selects it, an
 nothing that stays in the database -- \verb{:=}, \code{\link[=dbdt_temp]{dbdt_temp()}},
 \code{\link[=dbdt_merge]{dbdt_merge()}} -- is affected.
 }
+\examples{
+d <- as.dbdt(datasets::mtcars)
+d[cyl == 6]
+d[cyl == 6, .(mpg, hp)]
+d[, .(avg_mpg = mean(mpg), n = .N), by = cyl]
+}

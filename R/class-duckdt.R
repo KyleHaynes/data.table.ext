@@ -28,6 +28,13 @@
 #' `duckdt` names remain available with identical behavior. The S3 classes
 #' and `duckdt.*` options are retained for compatibility. [dbdt_connect()]
 #' opens DuckDB; use a `DBI`/`odbc` connection for SQL Server.
+#' @examples
+#' con <- dbdt_connect(quiet = TRUE)
+#' DBI::dbExecute(con, "CREATE TABLE t (id INTEGER, x DOUBLE)")
+#' DBI::dbExecute(con, "INSERT INTO t VALUES (1, 10), (2, 20)")
+#' d <- dbdt(con, "t")
+#' d
+#' dbdt_disconnect(con)
 #' @export
 duckdt <- function(conn, table, materialized = NA, writable = FALSE) {
   if (!duckdt_exists(conn, table)) {

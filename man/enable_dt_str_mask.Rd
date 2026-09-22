@@ -24,3 +24,9 @@ format, normalizes \code{":List"} to \code{": List"}, and removes the
 Non-\code{data.table} inputs are delegated to the original \code{utils::str} without
 changing defaults.
 }
+\examples{
+enable_dt_str_mask()
+DT <- data.table::as.data.table(iris)
+str(DT)
+disable_dt_str_mask()
+}

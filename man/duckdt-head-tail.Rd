@@ -38,3 +38,8 @@ R vector, and asking for one fails the whole query rather than just that
 column.
 }
 
+\examples{
+d <- as.dbdt(datasets::mtcars)
+head(d, 3)
+tail(d, 3)
+}

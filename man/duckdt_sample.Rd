@@ -33,3 +33,7 @@ This is a plain function rather than a
 generic (it doesn't call \code{UseMethod()}), so a \code{sample.duckdt} method would
 never be dispatched by a plain \code{sample(d, ...)} call.
 }
+\examples{
+d <- as.dbdt(datasets::mtcars)
+dbdt_sample(d, 5)
+}

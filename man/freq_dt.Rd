@@ -20,3 +20,8 @@ A data.table with columns matching \code{col}, \code{n}, and \code{pct}.
 Returns the top \code{n} most frequent values in a single column as a data.table
 with counts and percentages, sorted descending by count.
 }
+\examples{
+DT <- data.table::as.data.table(iris)
+freq_dt(DT, Species)
+freq_dt(DT, Species, n = 2)
+}

@@ -13,3 +13,7 @@ Invisibly returns \code{TRUE}.
 Removes \code{dput} from the global environment so base \code{dput} is used normally
 again.
 }
+\examples{
+enable_dt_dput_mask()
+disable_dt_dput_mask() # back to base::dput
+}

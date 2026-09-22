@@ -21,3 +21,7 @@ Buckets \code{dt[[col]]} into \code{bins} equal-width bins and renders a unicode
 bar-height sparkline alongside min/median/max, for a quick distribution
 scan without plotting.
 }
+\examples{
+DT <- data.table::as.data.table(iris)
+spark_dt(DT, Sepal.Length)
+}

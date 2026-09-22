@@ -24,3 +24,7 @@ MS SQL Server) are left out: no driver hands them back as an R vector, and
 on both backends asking for one fails the entire query. Select such a
 column by name (\code{x[, .(payload)]}) if you want to try anyway.
 }
+\examples{
+d <- as.dbdt(datasets::mtcars)
+data.table::as.data.table(d)[1:3]
+}

@@ -13,3 +13,6 @@ Invisibly returns \code{TRUE}.
 Enables all masking helpers and sets colored grouped sampling output on by
 default for the current session.
 }
+\examples{
+turn_everyone_on()
+}

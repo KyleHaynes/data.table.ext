@@ -207,6 +207,10 @@ duckdt_data_model.data.frame <- function(x, ...) {
 #'
 #' @param x Object to test.
 #' @return `TRUE` or `FALSE`.
+#' @examples
+#' dm <- dbdt_data_model(list(customers = data.frame(customer_id = 1L, name = "a")))
+#' is_dbdt_data_model(dm)
+#' is_dbdt_data_model(dm$tables)
 #' @export
 is_duckdt_data_model <- function(x) inherits(x, "duckdt_data_model")
 

@@ -13,3 +13,7 @@ Invisibly returns \code{TRUE}.
 Removes \code{str} from the global environment so base \code{utils::str} is used
 normally again.
 }
+\examples{
+enable_dt_str_mask()
+disable_dt_str_mask() # back to utils::str
+}

@@ -51,3 +51,10 @@ On DuckDB this is emulated with \verb{UPDATE ... FROM}, an anti-join \code{INSER
 and (if \code{delete = TRUE}) an anti-join \code{DELETE}, wrapped in a transaction.
 On MS SQL Server it compiles to a single native T-SQL \code{MERGE} statement.
 }
+\examples{
+cars <- data.table::data.table(car = rownames(datasets::mtcars), datasets::mtcars)
+d <- as.dbdt(cars, copy = TRUE)
+patch <- data.frame(car = c("Mazda RX4", "New Car"), hp = c(999, 111))
+dbdt_merge(d, patch, by = "car") # update matches, insert new rows
+d[, .(car, hp)][order(car)]
+}

@@ -18,3 +18,7 @@ Invisibly returns the character scalar that was printed.
 Renders \code{dt} as a GitHub-flavored markdown pipe table and prints it to the
 console, for pasting directly into docs, PRs, or issues.
 }
+\examples{
+DT <- data.table::as.data.table(iris)[1:3]
+md_dt(DT)
+}

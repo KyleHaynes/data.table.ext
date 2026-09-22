@@ -27,6 +27,11 @@
 #' @return A `"duckdt"` object, writable immediately (unlike [dbdt()]'s
 #'   read-only-by-default handles -- you just created this table, so there's
 #'   nothing accidental about writing to it).
+#' @examples
+#' d <- as.dbdt(datasets::mtcars) # zero-copy view
+#' d
+#' d2 <- as.dbdt(datasets::mtcars, copy = TRUE) # physically written, writable
+#' d2
 #' @export
 as.duckdt <- function(x, conn = NULL, name = NULL, overwrite = FALSE, copy = FALSE) {
   stopifnot(is.data.frame(x))
@@ -83,6 +88,9 @@ as.duckdt <- function(x, conn = NULL, name = NULL, overwrite = FALSE, copy = FAL
 #' @param x A `"duckdt"` object.
 #' @param ... Unused.
 #' @return A `data.table`.
+#' @examples
+#' d <- as.dbdt(datasets::mtcars)
+#' data.table::as.data.table(d)[1:3]
 #' @importFrom data.table as.data.table
 #' @exportS3Method data.table::as.data.table
 as.data.table.duckdt <- function(x, ...) {

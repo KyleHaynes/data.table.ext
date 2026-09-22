@@ -26,3 +26,8 @@ rows sharing the same values across \code{by}), ordered by cluster and tagged
 with grouped-print attributes so \code{enable_dt_print_thousands()} draws
 separators and colors between clusters, the same way \code{cdt()} does.
 }
+\examples{
+DT <- data.table::data.table(id = c(1, 1, 2, 3), name = c("a", "a", "b", "c"))
+dupe_dt(DT)
+dupe_dt(DT, by = "id")
+}

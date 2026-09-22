@@ -72,6 +72,10 @@ duckdt_temp <- function(x, i, j, by, name = NULL) {
 #'   Default `FALSE`. This deletes a real table -- there is no undo.
 #'
 #' @return `NULL`, invisibly.
+#' @examples
+#' d <- as.dbdt(datasets::mtcars)
+#' sixes <- dbdt_temp(d, cyl == 6)
+#' dbdt_drop(sixes)
 #' @export
 duckdt_drop <- function(x, force = FALSE) {
   if (!inherits(x, "duckdt")) {

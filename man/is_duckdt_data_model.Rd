@@ -18,3 +18,8 @@ is_dbdt_data_model(x)
 \description{
 Is this a duckdt data model?
 }
+\examples{
+dm <- dbdt_data_model(list(customers = data.frame(customer_id = 1L, name = "a")))
+is_dbdt_data_model(dm)
+is_dbdt_data_model(dm$tables)
+}

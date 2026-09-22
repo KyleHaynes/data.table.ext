@@ -7,6 +7,11 @@
 #' Non-`data.table` inputs are delegated unchanged.
 #'
 #' @return Invisibly returns `TRUE`.
+#' @examples
+#' enable_dt_dput_mask()
+#' DT <- data.table::data.table(x = 1:2)
+#' dput(DT[1:2]) # no .internal.selfref noise
+#' disable_dt_dput_mask()
 #' @export
 enable_dt_dput_mask <- function() {
     original <- get("dput", envir = asNamespace("base"))
@@ -43,6 +48,9 @@ enable_dt_dput_mask <- function() {
 #' again.
 #'
 #' @return Invisibly returns `TRUE`.
+#' @examples
+#' enable_dt_dput_mask()
+#' disable_dt_dput_mask() # back to base::dput
 #' @export
 disable_dt_dput_mask <- function() {
     if (exists("dput", envir = .GlobalEnv, inherits = FALSE)) {

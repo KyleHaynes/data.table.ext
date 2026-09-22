@@ -19,3 +19,8 @@ Convenience wrapper around \code{data.table::set()} for deleting columns by
 reference. This is equivalent to:
 \code{data.table::set(x, i = NULL, j = cols, value = NULL)}.
 }
+\examples{
+DT <- data.table::data.table(x = 1:3, y = 4:6, z = 7:9)
+set_null(DT, c("y", "z"))
+names(DT)
+}

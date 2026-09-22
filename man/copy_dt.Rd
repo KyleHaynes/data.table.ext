@@ -25,3 +25,8 @@ the system clipboard, for pasting into docs, PRs, or chat messages.
 Supported on Windows and macOS out of the box; on Linux, requires \code{xclip}
 or \code{xsel} to be installed.
 }
+\examples{
+DT <- data.table::as.data.table(iris)[1:3]
+# clip_fun lets you try this without touching the real clipboard
+copy_dt(DT, clip_fun = function(txt) cat("would copy", nchar(txt), "characters\n"))
+}
