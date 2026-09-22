@@ -1,6 +1,9 @@
 /.quarto/
 **/*.quarto_ipynb
 
-# Rendered site, and the explorer page generated while rendering duckdt-explore.qmd
+# Rendered site, and the explorer pages/screenshot generated while rendering
+# duckdt-explore.qmd and examples.qmd
 /_site/
 /assets/erd-example.html
+/assets/erd-realworld.html
+/assets/erd-screenshot.png

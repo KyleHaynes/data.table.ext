@@ -89,10 +89,12 @@ dbdt_disconnect(con)
 | If you want to... | Read |
 |:---|:---|
 | See what attaching the package changes, and how to undo it | [Get started](getting-started.qmd) |
+| See it used end to end: reconnecting, an unfamiliar database, a messy export | [Real-world examples](examples.qmd) |
 | Make printing, sampling and `str()` output easier to scan | [Printing & sampling](display.qmd) |
 | Profile a table and find duplicates, outliers and keys | [Data checks & helpers](checks.qmd) |
 | Query a database file, CSV or Parquet with `data.table` syntax | [Connect & load](duckdt-connect.qmd), [Query](duckdt-query.qmd) |
 | Join, update and merge inside the database | [Join, write & merge](duckdt-join-write.qmd) |
 | Understand and draw a database | [Explore a database](duckdt-explore.qmd) |
+| See real, measured timings, and where `dbdt` isn't the right tool | [Benchmarks](benchmarks.qmd) |
 | Find a function | [Function reference](reference.qmd) |
 | Know what does not work yet | [Limitations](limitations.qmd) |

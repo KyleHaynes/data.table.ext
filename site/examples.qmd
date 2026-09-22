@@ -1,0 +1,220 @@
+---
+title: "Real-world examples"
+description: "Three complete workflows, start to finish: picking up a warehouse file where you left off, making sense of a database you didn't build, and cleaning a messy export before it corrupts a join."
+---
+
+```{r}
+#| label: setup
+#| include: false
+source("_setup.R")
+# assets/ (the ER diagram page + its screenshot) must live under the site's
+# own directory so Quarto publishes it; everything else in this page is
+# scratch, so root.dir moves to a temp dir for the rest of the chunks.
+site_dir <- normalizePath(".")
+assets_dir <- file.path(site_dir, "assets")
+dir.create(assets_dir, showWarnings = FALSE)
+knitr::opts_knit$set(root.dir = tempdir())
+```
+
+Every other page in this site demonstrates one function at a time. This page strings several together into the kind of task they actually show up in.
+
+## 1. Pick up a warehouse file where you left off {#reconnect}
+
+You saved a table to a `.duckdb` file yesterday (or last sprint). Today you're in a fresh R session and need it back -- this is the [persistence workflow](../WORKFLOW.md) end to end, with real output at every step.
+
+**Yesterday**, a `data.table` of support tickets gets written to disk:
+
+```{r}
+tickets <- data.table(
+  ticket_id = 1:8,
+  customer  = c("Alice", "Bob", "Alice", "Carol", "Bob", "Dana", "Carol", "Alice"),
+  priority  = c("high", "low", "medium", "high", "low", "medium", "low", "high"),
+  status    = c("open", "closed", "open", "open", "closed", "closed", "open", "open"),
+  opened_on = as.Date("2024-06-01") + c(0, 1, 1, 2, 3, 3, 4, 5)
+)
+
+file_con <- dbdt_connect("support.duckdb")
+as.dbdt(tickets, conn = file_con, name = "tickets", copy = TRUE)
+dbdt_disconnect(file_con)
+```
+
+**Today**, a new session reconnects to the same file. `dbdt_connect()` summarises what it found, so you don't need to remember:
+
+```{r}
+con <- dbdt_connect("support.duckdb")
+```
+
+```{r}
+dbdt_tables(con)
+```
+
+Wrap the table and answer the actual question -- open, high-priority tickets, oldest first:
+
+```{r}
+d <- dbdt(con, "tickets")
+d[status == "open" & priority == "high"][order(opened_on)]
+```
+
+`dbdt()` hands back a **read-only** handle after a reconnect, on purpose: nothing stops you from wrapping a table you only meant to look at, and this way a stray `:=` can't silently rewrite yesterday's data.
+
+```{r}
+#| error: true
+today <- Sys.Date()
+d[, days_open := today - opened_on]
+```
+
+Opt in explicitly once you actually mean to write. `Sys.Date()` itself has no DuckDB equivalent (see [Using R values](duckdt-query.qmd#r-values)), so it's worked out in R first, as `today` above -- only the subtraction, a plain value against a column, needs to go to DuckDB:
+
+```{r}
+d <- dbdt(con, "tickets", writable = TRUE)
+d[, days_open := today - opened_on]
+d[, .(ticket_id, customer, priority, days_open)][order(-days_open)]
+```
+
+```{r}
+#| include: false
+dbdt_disconnect(con)
+file.remove("support.duckdb")
+```
+
+## 2. Make sense of a database you didn't build {#unfamiliar-db}
+
+Someone hands you a connection string and no documentation. `dbdt_example()` stands in for that database -- a small toy shop with real keys declared, so the steps below are exactly what you'd run against the real thing.
+
+```{r}
+con <- dbdt_example()
+dbdt_tables(con)
+```
+
+Four tables. What connects them?
+
+```{r}
+dbdt_relationships(con)
+```
+
+That's the whole schema in six columns, but a diagram answers "how does this fit together" faster than a table of foreign keys does. `dbdt_erd()` draws one, and -- as you tick tables and columns -- writes the query that gets you exactly those, joins included:
+
+```{r}
+#| include: false
+erd_file <- file.path(assets_dir, "erd-realworld.html")
+screenshot_file <- file.path(assets_dir, "erd-screenshot.png")
+
+erd_path <- dbdt_erd(
+  con, open = FALSE, include_row_counts = TRUE,
+  select = c("orders", "customers"),
+  title = "Toy shop (unfamiliar database)",
+  file = erd_file
+)
+
+have_shot <- FALSE
+if (requireNamespace("chromote", quietly = TRUE)) {
+  have_shot <- tryCatch({
+    b <- chromote::ChromoteSession$new(width = 1400, height = 900)
+    on.exit(b$close(), add = TRUE)
+    b$Emulation$setEmulatedMedia(features = list(list(name = "prefers-color-scheme", value = "light")))
+    b$Page$navigate(paste0("file:///", gsub("\\\\", "/", normalizePath(erd_file))))
+    b$Page$loadEventFired()
+    Sys.sleep(2)
+    b$Runtime$evaluate("
+      var item = Array.prototype.find.call(
+        document.querySelectorAll('.table-item'),
+        function (i) { return i.dataset.table === 'orders'; }
+      );
+      if (item) item.classList.add('open');
+    ")
+    Sys.sleep(1)
+    b$screenshot(filename = screenshot_file)
+    TRUE
+  }, error = function(e) FALSE)
+}
+```
+
+```{r}
+#| echo: false
+#| results: asis
+if (have_shot) {
+  cat("![`dbdt_erd(con, select = c(\"orders\", \"customers\"))`, with `orders` expanded to show its columns. The two tables start ticked, so the sidebar already has the generated query for them.](assets/erd-screenshot.png){fig-alt=\"Screenshot of the dbdt_erd() page: an entity-relationship diagram of the toy shop database on the left, and a searchable table/column list with a generated SQL query on the right.\"}\n")
+} else {
+  cat("_(The static screenshot above needs `chromote` and a local Chrome or Edge install; here is the same page, live, instead.)_\n\n")
+  cat("```{=html}\n<iframe class=\"explorer-frame\" src=\"assets/erd-realworld.html\" title=\"Interactive ER diagram of the toy shop database\"></iframe>\n```\n")
+}
+```
+
+That screenshot is the actual page `dbdt_erd()` just wrote for this database -- not a mockup. Ticking `orders` and `customers` in the real, interactive version below writes `dbdt(con, "orders")[, .(...)]` for one table, or a join for several, with a copy button:
+
+```{=html}
+<iframe class="explorer-frame" src="assets/erd-realworld.html" title="Interactive ER diagram of the toy shop database"></iframe>
+```
+
+`dbdt_dm_query()` is the same join-building logic without the browser, for when you already know which tables and columns you want:
+
+```{r}
+sql <- dbdt_dm_query(
+  dbdt_data_model(con), c("orders", "customers"),
+  columns = list(orders = c("order_id", "ordered_on"), customers = "name"),
+  where = "ordered_on >= '2024-01-01'"
+)
+cat(sql)
+```
+
+```{r}
+setDT(DBI::dbGetQuery(con, sql))[]
+```
+
+```{r}
+#| include: false
+dbdt_disconnect(con)
+```
+
+## 3. A messy export lands before a big join {#messy-export}
+
+Two systems get merged, and the customer list from the acquired one is full of the usual damage: typos, inconsistent name order, addresses re-keyed by different people. Joining it against the main customer table on `name` and `address` as-is will silently miss rows and silently create duplicates. A few checks before that join catches most of it.
+
+```{r}
+cohort <- data.table(
+  given_name = c("Cyle", "Kyle", "Sarah", "Kyle", "Saira", "Kyle", "Kylie", "Sara", "Sarah"),
+  last_name  = c("Hines", "Haynes", "Smith", "Haynes", "Smyth", "Haynes", "Hines", "Smythe", "Smith"),
+  dob        = as.Date(c("1988-01-10", "1990-03-15", "1991-05-18", "1990-03-15",
+                          "1994-02-28", "1990-03-15", "1992-11-03", "1993-09-12", "1991-05-18")),
+  address    = c("789 Pine Ln", "123 Main St", "321 Park Way", "123 Main St",
+                  "987 Maple St", "124 Oak Ave", "456 Elm Rd", "654 Birch Dr", "321 Park Way"),
+  balance    = c(42.50, 118.20, 76.00, 118.20, 9.99, 118.20, 302.10, 55.40, 76.00)
+)
+```
+
+`key_dt()` answers the question you'd otherwise get wrong by guessing: what actually identifies a row here, so the join has something reliable to match on?
+
+```{r}
+key_dt(cohort)
+```
+
+Nothing comes back, even though `key_dt()` tries every combination of up to `max_size` (3, by default) columns. That's the honest answer, not a search that gave up early: rows 2 and 4 are identical across all five columns, so no combination -- of 3, or of all 5 -- can tell them apart. A join key search that finds nothing is telling you something a quick glance at the raw table would miss in a file bigger than nine rows.
+
+`dupe_dt()` finds rows that collide on a key you pick, so you can see what kind of collision this actually is:
+
+```{r}
+dupe_dt(cohort, by = c("dob", "address"))
+```
+
+Two clean pairs: rows 2 and 4 are the same `Kyle Haynes` record, entered twice, byte for byte -- a straightforward de-dupe. Rows 3 and 9 are the same `Sarah Smith`, likewise. Row 6 -- also a `Kyle Haynes`, same birthdate, `124 Oak Ave` instead of `123 Main St` -- doesn't show up here at all, because matching on `dob` + `address` only catches records that agree on both. A person re-entered with an updated address is invisible to an exact-match key by construction.
+
+`cdt()` colours every column so the same value gets the same colour wherever it appears -- no group needed, the whole table is one unit:
+
+```{r}
+cdt(cohort[, .(given_name, last_name, dob, address, balance)])
+```
+
+Rows 2, 4 and 6 share one colour across `given_name`, `last_name`, `dob` and `balance` -- the `Kyle Haynes`/`1990-03-15`/`118.20` cluster `dupe_dt()` couldn't fully see -- and only `address` breaks from it, in a colour of its own. That's the exact-match key's blind spot made visible: one column, standing out in an otherwise-matching row, is what "probably the same person, re-entered" looks like.
+
+::: {.callout-note}
+## This is exact-value colouring, not typo detection
+`enable_dt_print_thousands()` also takes `group_value_mode = "similarity"`, clustering near-identical spellings (`"Kyle"`/`"Cyle"`) into the same colour instead of requiring an exact match. It doesn't help here: `cdt()`, `sample_dt()` and `dupe_dt()` all pin `"distinct"` mode on the tables they return, and that stored setting wins over the session option -- see [Known limitations](limitations.qmd#colour-mode) for the details. What's shown above is `"distinct"` mode: every *exact* repeated value gets a colour, which is still enough to catch a re-entered record like row 6.
+:::
+
+Last, `outlier_dt()` catches the kind of error neither of the above will: a `balance` that's a data-entry mistake rather than a name or address variant.
+
+```{r}
+outlier_dt(cohort, cols = "balance")
+```
+
+`Kylie Hines`'s `$302.10` is flagged by the default IQR rule -- genuinely the largest balance in the table, not a fabricated example. It's exactly the shape of error the other three checks can't catch: `Kylie Hines` isn't part of any duplicate cluster and doesn't share a colour with anyone else in the table above. Nothing about her *identity* is wrong; a `$118.20` typed as `$11,820.00` or a `$302.10` that should have been `$30.21` looks exactly like this. On real data this is a five-minute pass -- `key_dt()`, `dupe_dt()`, a coloured `cdt()` scan, `outlier_dt()` -- that turns "the join produced 4% more rows than either input" from a Friday-afternoon mystery into something you saw coming.

@@ -1,0 +1,262 @@
+---
+title: "Benchmarks"
+description: "Real, measured timings on this machine: filtering a file bigger than you want to load, round-tripping a table to disk, and the honest cost of the database round trip on small data."
+---
+
+```{r}
+#| label: setup
+#| include: false
+source("_setup.R")
+suppressPackageStartupMessages(library(microbenchmark))
+has_arrow <- requireNamespace("arrow", quietly = TRUE)
+has_fst   <- requireNamespace("fst", quietly = TRUE)
+has_qs    <- requireNamespace("qs", quietly = TRUE)
+knitr::opts_knit$set(root.dir = tempdir())
+```
+
+Every other page in this site uses small inputs so it renders quickly. This one doesn't. Every number below is measured on this machine, right now, by the code shown -- not picked to flatter the package. Where `dbdt` loses, that's reported too, along with why.
+
+```{r}
+#| label: versions
+cat("data.table.ext:", as.character(utils::packageVersion("data.table.ext")), "\n")
+cat("data.table:    ", as.character(utils::packageVersion("data.table")), "\n")
+cat("duckdb:        ", as.character(utils::packageVersion("duckdb")), "\n")
+cat("R:             ", R.version.string, "\n")
+cat("cores:         ", parallel::detectCores(), "\n")
+```
+
+```{r}
+#| label: results-accumulator
+#| include: false
+results <- list()
+record <- function(section, op, baseline, baseline_s, other_s) {
+  results[[length(results) + 1]] <<- data.frame(
+    section = section, operation = op, baseline = baseline,
+    baseline_s = unname(baseline_s), dbdt_s = unname(other_s),
+    speedup = unname(baseline_s) / unname(other_s)
+  )
+}
+```
+
+## A file bigger than you want to load {#file-scan}
+
+The scenario this package is built for: someone hands you a file export, and you need one number out of it. `dbdt_csv()`/`dbdt_parquet()` register the file as a lazy view -- DuckDB reads only what a query touches -- versus the usual "load the whole thing, then filter." Format matters here more than it might seem, so both are tested rather than just the more flattering one.
+
+```{r}
+#| label: make-files
+set.seed(1)
+n <- 5e6
+pos <- data.table(
+  transaction_id = seq_len(n),
+  store_id       = sample(1:200, n, replace = TRUE),
+  region         = sample(c("APAC", "EMEA", "AMER", "LATAM"), n, replace = TRUE),
+  sku            = sprintf("SKU-%05d", sample(1:5000, n, replace = TRUE)),
+  qty            = sample(1:5, n, replace = TRUE),
+  unit_price     = round(runif(n, 2, 200), 2)
+)
+fwrite(pos, "pos.csv")
+if (has_arrow) arrow::write_parquet(pos, "pos.parquet")
+cat(sprintf(
+  "%s rows -- %.1f MB as CSV%s\n",
+  format(n, big.mark = ",", scientific = FALSE), file.size("pos.csv") / 1024^2,
+  if (has_arrow) sprintf(", %.1f MB as Parquet", file.size("pos.parquet") / 1024^2) else ""
+))
+```
+
+The task, against both files: total revenue for one store, in one region -- a needle in a haystack (1 store of 200, in 1 region of 4). Each variant is timed three times; the median is reported, since a cold first read is noisier than the steady state.
+
+```{r}
+#| label: timing-helper
+rep_time <- function(f, times = 3) {
+  ts <- vapply(seq_len(times), function(i) { gc(FALSE); system.time(f())[["elapsed"]] }, numeric(1))
+  stats::median(ts)
+}
+```
+
+### Parquet: pruning is real {#parquet}
+
+Parquet stores data column-by-column, with per-row-group statistics, so a reader *can* skip most of the file for a selective filter on a couple of columns. `dbdt_parquet()` gets that for free from DuckDB; the fair baseline is `arrow::read_parquet()` also asked to select only the needed columns, not a naive full read.
+
+```{r}
+#| label: bench-parquet
+#| eval: !expr has_arrow
+t_arrow <- rep_time(function() {
+  full <- as.data.table(arrow::read_parquet("pos.parquet", col_select = c("store_id", "region", "qty", "unit_price")))
+  ans_arrow <<- full[store_id == 42 & region == "APAC", .(revenue = sum(qty * unit_price))]
+})
+t_dbdt_pq <- rep_time(function() {
+  v <- dbdt_parquet("pos.parquet")
+  ans_dbdt_pq <<- v[store_id == 42 & region == "APAC", .(revenue = sum(qty * unit_price))]
+})
+cat(sprintf("arrow::read_parquet(col_select = ...) + filter: %.3fs (median of 3)\n", t_arrow))
+cat(sprintf("dbdt_parquet() + filter:                        %.3fs (median of 3)\n", t_dbdt_pq))
+record("File scan (Parquet)", "filter + aggregate (5M rows)", "arrow::read_parquet(col_select) + filter", t_arrow, t_dbdt_pq)
+```
+
+`r if (has_arrow) sprintf("A real %.1fx here", t_arrow / t_dbdt_pq) else "Skipped (arrow not installed)"` -- DuckDB pushes both the column selection *and* the `store_id`/`region` filter into the Parquet reader itself, so it decodes a fraction of a fraction of the file. `arrow::read_parquet()` decodes the four requested columns for every row before `data.table` gets to filter any of them; the win comes from never decoding the 4.99M rows the filter throws away, not from a faster codec.
+
+### CSV: the same trick, no advantage {#csv}
+
+CSV is plain text, row by row, with no stored statistics and no column-oriented layout -- there is nothing analogous to prune. Every engine has to scan and parse every row to find out which ones match, and `fread()`'s parallel parser is a hard baseline to beat at that job.
+
+```{r}
+#| label: bench-csv
+t_fread <- rep_time(function() {
+  full <- fread("pos.csv")
+  ans_fread <<- full[store_id == 42 & region == "APAC", .(revenue = sum(qty * unit_price))]
+})
+loaded_mb <- as.numeric(object.size(fread("pos.csv"))) / 1024^2
+t_dbdt_csv <- rep_time(function() {
+  v <- dbdt_csv("pos.csv")
+  ans_dbdt_csv <<- v[store_id == 42 & region == "APAC", .(revenue = sum(qty * unit_price))]
+})
+cat(sprintf("fread() + filter:      %.3fs (median of 3, materializes ~%.0f MB in R)\n", t_fread, loaded_mb))
+cat(sprintf("dbdt_csv() + filter:   %.3fs (median of 3, materializes nothing until the answer)\n", t_dbdt_csv))
+record("File scan (CSV)", "filter + aggregate (5M rows)", "fread() + filter", t_fread, t_dbdt_csv)
+```
+
+```{r}
+#| label: correctness-check
+#| include: false
+stopifnot(isTRUE(all.equal(ans_fread$revenue, ans_dbdt_csv$revenue)))
+if (has_arrow) stopifnot(isTRUE(all.equal(ans_arrow$revenue, ans_dbdt_pq$revenue)))
+```
+
+`r if (t_dbdt_csv <= t_fread) "dbdt_csv() actually came out ahead here too" else sprintf("fread() wins this one -- %.1fx", t_dbdt_csv / t_fread)` -- an honest result, not the one this package would pick if it could. `dbdt_csv()` still never held the full table in R (`fread()`'s copy above is real memory, not a hypothetical), which matters once the file stops comfortably fitting -- but on a file this size, on this machine, that headroom didn't come with a speed advantage. Reach for `dbdt_csv()` for a file too big to load at all, or when the source already writes Parquet; reach for `fread()` for a CSV that fits and one query.
+
+```{r}
+#| label: cleanup-files
+#| include: false
+file.remove("pos.csv")
+if (has_arrow) file.remove("pos.parquet")
+```
+
+## Round-tripping a table to disk {#io}
+
+The other common case: saving a table so a later session can pick it up ([Connect & load](duckdt-connect.qmd#persist)), against the usual ways to do that in R. Ten string columns of mixed cardinality, since text is where formats diverge most -- an all-numeric table would mostly measure memcpy speed.
+
+```{r}
+#| label: io-data
+rand_strings <- function(n, len) Reduce(paste0, replicate(len, sample(letters, n, replace = TRUE), simplify = FALSE))
+make_data <- function(n) {
+  set.seed(1)
+  data.table(
+    id           = sprintf("ID%010d", seq_len(n)),
+    category     = sample(sprintf("cat_%02d", 1:20), n, replace = TRUE),
+    region       = sample(c("APAC", "EMEA", "AMER", "LATAM"), n, replace = TRUE),
+    status       = sample(c("active", "inactive", "pending", "closed"), n, replace = TRUE),
+    country_code = sample(sprintf("C%03d", 1:50), n, replace = TRUE),
+    product_code = rand_strings(n, 6),
+    tag          = sample(sprintf("tag_%03d", 1:100), n, replace = TRUE),
+    email_domain = sample(c("gmail.com", "outlook.com", "yahoo.com", "company.com", "example.org"), n, replace = TRUE),
+    description  = rand_strings(n, 12),
+    notes        = rand_strings(n, 20)
+  )
+}
+n_io <- 2e6
+dt_io <- make_data(n_io)
+```
+
+```{r}
+#| label: io-bench
+time_it <- function(f) { gc(FALSE); t0 <- proc.time()[["elapsed"]]; f(); proc.time()[["elapsed"]] - t0 }
+io_rows <- list()
+add_io <- function(format, op, secs, size_bytes) {
+  io_rows[[length(io_rows) + 1]] <<- data.frame(
+    format = format, op = op, seconds = round(secs, 3),
+    rows_per_sec = round(n_io / secs), file_mb = round(size_bytes / 1024^2, 1)
+  )
+}
+
+add_io("saveRDS/readRDS", "write", time_it(function() saveRDS(dt_io, "b.rds")), file.size("b.rds"))
+add_io("saveRDS/readRDS", "read",  time_it(function() readRDS("b.rds")), file.size("b.rds"))
+
+add_io("fwrite/fread", "write", time_it(function() fwrite(dt_io, "b.csv")), file.size("b.csv"))
+add_io("fwrite/fread", "read",  time_it(function() fread("b.csv")), file.size("b.csv"))
+
+if (has_arrow) {
+  add_io("arrow (parquet)", "write", time_it(function() arrow::write_parquet(dt_io, "b.parquet")), file.size("b.parquet"))
+  add_io("arrow (parquet)", "read",  time_it(function() as.data.table(arrow::read_parquet("b.parquet"))), file.size("b.parquet"))
+}
+if (has_fst) {
+  add_io("fst", "write", time_it(function() fst::write_fst(dt_io, "b.fst")), file.size("b.fst"))
+  add_io("fst", "read",  time_it(function() fst::read_fst("b.fst", as.data.table = TRUE)), file.size("b.fst"))
+}
+if (has_qs) {
+  add_io("qs", "write", time_it(function() qs::qsave(dt_io, "b.qs")), file.size("b.qs"))
+  add_io("qs", "read",  time_it(function() qs::qread("b.qs")), file.size("b.qs"))
+}
+
+con_io <- dbdt_connect("b.duckdb", quiet = TRUE)
+add_io("dbdt (.duckdb)", "write", time_it(function() {
+  as.dbdt(dt_io, conn = con_io, name = "bench", copy = TRUE, overwrite = TRUE)
+}), file.size("b.duckdb"))
+add_io("dbdt (.duckdb)", "read", time_it(function() {
+  as.data.table(dbdt(con_io, "bench"))
+}), file.size("b.duckdb"))
+dbdt_disconnect(con_io)
+
+io_df <- rbindlist(io_rows)
+knitr::kable(io_df, col.names = c("Format", "Op", "Seconds", "Rows/sec", "File (MB)"))
+```
+
+```{r}
+#| label: io-record
+#| include: false
+w <- io_df[format == "fwrite/fread" & op == "write", seconds]
+r <- io_df[format == "fwrite/fread" & op == "read", seconds]
+dw <- io_df[format == "dbdt (.duckdb)" & op == "write", seconds]
+dr <- io_df[format == "dbdt (.duckdb)" & op == "read", seconds]
+record("Round trip (2M rows)", "write vs fwrite", "fwrite()", w, dw)
+record("Round trip (2M rows)", "read vs fread", "fread()", r, dr)
+```
+
+```{r}
+#| label: io-cleanup
+#| include: false
+for (f in c("b.rds", "b.csv", "b.parquet", "b.fst", "b.qs", "b.duckdb")) {
+  if (file.exists(f)) file.remove(f)
+}
+rm(dt_io); invisible(gc(FALSE))
+```
+
+## The honest cost: small, already-in-R data {#small-n}
+
+[A file bigger than you want to load](#file-scan) and [Round-tripping a table to disk](#io) both move data of a size where paying DuckDB's dispatch and SQL-translation cost is worth it. It shouldn't be free at the other end -- a handful of rows already sitting in an R `data.table`, filtered through `dbdt`, has to beat plain `data.table[...]` doing the exact same thing with zero indirection. Here's that checked directly, at `n = 2,000`:
+
+```{r}
+#| label: bench-small-n
+small <- make_data(2000)
+con_small <- dbdt_example()
+d_small <- as.dbdt(small, conn = con_small)
+print(microbenchmark(
+  data.table = small[category == "cat_05"],
+  dbdt       = d_small[category == "cat_05"],
+  times = 30
+))
+dbdt_disconnect(con_small)
+```
+
+Plain `data.table` wins here, and by design: v1 of `dbdt` is deliberately eager (see [Design notes](../README.md#design-notes)), so every `[` on a handle is a full round trip -- build SQL, send it to DuckDB, get rows back -- against `data.table`'s direct vector scan with no serialization at all. For data that already lives in R and comfortably fits, that's a real cost with no offsetting benefit. `dbdt` earns its keep once the data is bigger than you want to hold in R, already lives in a database, or the "already fits" assumption stops being true -- which is the whole point of [the section above](#file-scan).
+
+## Summary
+
+```{r}
+#| label: tbl-summary
+#| tbl-cap: !expr 'sprintf("Observed timings (this machine -- yours will vary): %d cores, %s.", parallel::detectCores(), R.version.string)'
+summary_df <- do.call(rbind, results)
+summary_df$baseline_s <- round(summary_df$baseline_s, 3)
+summary_df$dbdt_s     <- round(summary_df$dbdt_s, 3)
+summary_df$speedup    <- paste0(round(summary_df$speedup, 2), "x")
+knitr::kable(
+  summary_df[, -1],
+  row.names = FALSE,
+  col.names = c("Operation", "Baseline", "Baseline (s)", "dbdt (s)", "Speedup")
+)
+```
+
+Read this table with the trade-off in view, not just the multiplier:
+
+- **The pruning win is format-specific, and only shows up where it's real.** `dbdt_parquet()` beats a column-selecting `arrow::read_parquet()` because Parquet's layout gives DuckDB something to skip. `dbdt_csv()` loses to `fread()` on the exact same query against the exact same data, because CSV gives it nothing to skip -- there's no pruning to push down into a format that has no row groups or column stats. Same package, same operation, opposite result, because the file format is what actually decides it.
+- **The round trip to disk is competitive, not dominant.** `dbdt`'s `.duckdb` file is in the same range as `fwrite`/`fst`/`arrow` for this mixed-string table -- worth it because you get a queryable database back, not a plain file, not because it's the fastest serializer on the shelf.
+- **Small, already-in-memory data has no reason to go through SQL.** The overhead is real, it's consistent with the package's own design notes, and the fix isn't a faster `dbdt` -- it's using plain `data.table` for that case, which is what [the section above](#small-n) recommends.

@@ -2,7 +2,7 @@ project:
   type: website
   output-dir: _site
   resources:
-    - assets/*.html
+    - assets/*
 
 website:
   title: "data.table.ext"
@@ -25,6 +25,7 @@ website:
       - href: index.qmd
         text: Home
       - getting-started.qmd
+      - examples.qmd
       - section: "Display & data checks"
         contents:
           - display.qmd
@@ -39,6 +40,7 @@ website:
       - section: "Reference"
         contents:
           - reference.qmd
+          - benchmarks.qmd
           - limitations.qmd
   page-footer:
     left: "MIT licence"

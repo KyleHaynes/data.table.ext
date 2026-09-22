@@ -107,7 +107,7 @@ Every exported function, grouped by theme as in the startup banner.
 
 ## Documentation
 
-- **[Documentation site](site/)**: a [Quarto](https://quarto.org/) website with runnable examples. Getting started, printing and sampling, data checks and helpers, the `dbdt` guides (connect and load, query, join/write/merge, explore a database, SQL Server), a function reference, and a limitations page. Build it from the repository root:
+- **[Documentation site](site/)**: a [Quarto](https://quarto.org/) website with runnable examples. Getting started, [real-world examples](site/examples.qmd) (reconnecting to a warehouse file, an unfamiliar database, cleaning a messy export), printing and sampling, data checks and helpers, the `dbdt` guides (connect and load, query, join/write/merge, explore a database, SQL Server), a function reference, [measured benchmarks](site/benchmarks.qmd), and a limitations page. Build it from the repository root:
 
   ```sh
   quarto render site      # writes site/_site
