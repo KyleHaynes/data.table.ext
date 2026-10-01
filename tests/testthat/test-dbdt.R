@@ -1,7 +1,7 @@
 test_that("every public duckdt function has a compatible dbdt name", {
   exports <- getNamespaceExports("data.table.ext")
   legacy <- grep("duckdt", exports, value = TRUE)
-  expect_length(legacy, 36L)
+  expect_length(legacy, 38L)
   for (old in legacy) {
     new <- sub("duckdt", "dbdt", old, fixed = TRUE)
     expect_true(new %in% exports, info = new)

@@ -78,7 +78,7 @@ test_that("duckdt_merge() drops its staging table after running", {
   patch <- data.frame(car = "Mazda RX4", hp = 1)
   invisible(duckdt_merge(d, patch, by = "car"))
   tbls <- duckdt_tables(d)
-  expect_false(any(grepl("__duckdt_merge_tmp", tbls$name)))
+  expect_false(any(grepl("duckdt_stage_", tbls$name)))
 })
 
 test_that("duckdt_merge() errors on a read-only (registered) view", {

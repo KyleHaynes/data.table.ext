@@ -85,7 +85,7 @@ duckdt_join <- function(x, y, by = NULL, by.x = NULL, by.y = NULL,
 
   # `[]` works around a data.table quirk where setDT() suppresses the next
   # top-level auto-print (see the note in bracket.R).
-  data.table::setDT(DBI::dbGetQuery(conn, sql))[]
+  data.table::setDT(duckdt_get_query(conn, sql))[]
 }
 
 #' @rdname duckdt_join
@@ -142,7 +142,7 @@ duckdt_join_stage_side <- function(conn, v, cols, dialect, label) {
   if (inherits(v, "duckdt")) {
     return(list(sql = as.character(duckdt_qtbl(v)), staged = NULL))
   }
-  tmp <- duckdt_temp_name(paste0("join_", label))
+  tmp <- duckdt_staging_name(paste0("join_", label))
   duckdt_merge_stage(conn, v, y_is_duckdt = FALSE, cols = cols, tmp_name = tmp, dialect = dialect)
   list(sql = as.character(DBI::dbQuoteIdentifier(conn, tmp)), staged = tmp)
 }

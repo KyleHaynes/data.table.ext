@@ -40,6 +40,9 @@ as.duckdt <- function(x, conn = NULL, name = NULL, overwrite = FALSE, copy = FAL
   }
   if (is.null(conn)) {
     conn <- DBI::dbConnect(duckdb::duckdb())
+    # Ours until the handle over it is returned: close it if setup fails.
+    owned <- TRUE
+    on.exit(if (owned) try(DBI::dbDisconnect(conn, shutdown = TRUE), silent = TRUE), add = TRUE)
     duckdt_hint_erd()
   }
 
@@ -50,11 +53,11 @@ as.duckdt <- function(x, conn = NULL, name = NULL, overwrite = FALSE, copy = FAL
       duckdb::duckdb_register(conn, src_name, x)
       on.exit(try(duckdb::duckdb_unregister(conn, src_name), silent = TRUE), add = TRUE)
       create_sql <- if (overwrite) "CREATE OR REPLACE TABLE " else "CREATE TABLE "
-      DBI::dbExecute(conn, paste0(
+      duckdt_execute(conn, paste0(
         create_sql, DBI::dbQuoteIdentifier(conn, name), " AS SELECT * FROM ", qsrc
       ))
     } else {
-      DBI::dbWriteTable(conn, name, x, overwrite = overwrite)
+      duckdt_write_table(conn, name, x, overwrite = overwrite)
     }
     materialized <- TRUE
   } else {
@@ -72,7 +75,9 @@ as.duckdt <- function(x, conn = NULL, name = NULL, overwrite = FALSE, copy = FAL
     materialized <- FALSE
   }
 
-  duckdt(conn, name, materialized = materialized, writable = TRUE)
+  out <- duckdt(conn, name, materialized = materialized, writable = TRUE)
+  owned <- FALSE
+  out
 }
 
 #' Pull a duckdt handle fully into a data.table
@@ -97,5 +102,5 @@ as.data.table.duckdt <- function(x, ...) {
   # `[]` works around a data.table quirk where setDT() suppresses the next
   # top-level auto-print (see the note in bracket.R).
   sql <- paste0("SELECT ", duckdt_star(x), " FROM ", duckdt_qtbl(x))
-  data.table::setDT(DBI::dbGetQuery(x$conn, sql))[]
+  data.table::setDT(duckdt_get_query(x$conn, sql))[]
 }

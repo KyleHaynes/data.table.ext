@@ -13,6 +13,9 @@ src <- readLines("reference.qmd", warn = FALSE)
 listed <- unlist(regmatches(src, gregexpr("`[A-Za-z][A-Za-z0-9._]*\\(", src)))
 listed <- unique(sub("^`", "", sub("\\($", "", listed)))
 unlisted <- sort(setdiff(getNamespaceExports("data.table.ext"), listed))
+# Every dbdt_*() function is also exported under its original duckdt_*() name;
+# an alias counts as listed when its dbdt name is.
+unlisted <- unlisted[!sub("duckdt", "dbdt", unlisted, fixed = TRUE) %in% listed]
 ```
 
 ```{r}
@@ -25,7 +28,7 @@ if (length(unlisted)) {
 }
 ```
 
-The functions are grouped as they are in the startup banner: first the two halves of the package, then what the functions are for. `?name` opens a function's help page, and `help(package = "data.table.ext")` lists them all.
+The functions are grouped as they are in the startup banner: first the two halves of the package, then what the functions are for. `?name` opens a function's help page, and `help(package = "data.table.ext")` lists them all. Every `dbdt` function is also exported under its original `duckdt` name (`dbdt_join()` is `duckdt_join()`), so older code keeps working.
 
 ## Display, sampling & readability
 
@@ -66,6 +69,7 @@ The functions are grouped as they are in the startup banner: first the two halve
 | `freq_dt()` | The most frequent values of one column, with counts and proportions | [Profile](checks.qmd#profile) |
 | `spark_dt()` | A text sparkline of a numeric column's distribution, with min, median and max | [Profile](checks.qmd#profile) |
 | `key_dt()` | Minimal column combinations that identify every row uniquely | [`key_dt()`](checks.qmd#key-dt) |
+| `compare_dt()` | Every difference between two versions of a table: rows only in one, and each changed value | [`compare_dt()`](checks.qmd#compare-dt) |
 
 ### Columns {#columns}
 
@@ -97,7 +101,7 @@ The functions are grouped as they are in the startup banner: first the two halve
 | Function | What it does | Read more |
 |:---|:---|:---|
 | `as.dbdt()` | Push a `data.frame` into DuckDB as a handle: a zero-copy view, or a table with `copy = TRUE` | [From R](duckdt-connect.qmd#as-duckdt) |
-| `dbdt()` | Wrap a table or view that already exists in the database | [Existing table](duckdt-connect.qmd#duckdt) |
+| `dbdt()` | Wrap a table or view that already exists in the database, in any schema | [Existing table](duckdt-connect.qmd#duckdt) |
 | `dbdt_csv()` | A lazy view over CSV file(s) | [From files](duckdt-connect.qmd#files) |
 | `dbdt_parquet()` | A lazy view over Parquet file(s) | [From files](duckdt-connect.qmd#files) |
 
@@ -106,6 +110,8 @@ The functions are grouped as they are in the startup banner: first the two halve
 | Function | What it does | Read more |
 |:---|:---|:---|
 | `dbdt_sample()` | Sample `n` rows in the database | [Peeking and sampling](duckdt-query.qmd#peeking) |
+| `dbdt_profile()` | Missing, distinct, min and max for every column, computed in the database | [Profiling a table](duckdt-query.qmd#profile) |
+| `dbdt_sql()` | The SQL `d[i, j, by]` would run, without running it | [Seeing the SQL](duckdt-query.qmd#sql) |
 
 The query itself is `d[i, j, by]`, with `head()` and `tail()` for peeking; see [methods on handles](#methods).
 
@@ -165,7 +171,7 @@ These are S3 methods, so they are not exported functions of their own. Their hel
 
 | Call | What it does | Help |
 |:---|:---|:---|
-| `d[i, j, by]` | Translate to SQL, run in DuckDB, return a `data.table`. `j` may be `:=` to write. | `?"[.duckdt"` |
+| `d[i, j, by]` | Translate to SQL, run in the database, return a `data.table`. `i` may be `order()` to sort; `j` may be `:=` to write. | `?"[.duckdt"` |
 | `head(d, n)`, `tail(d, n)` | First and last rows | `?"duckdt-head-tail"` |
 | `merge(x, y, ...)` | Calls `dbdt_join()` | `?dbdt_join` |
 | `as.data.table(d)` | The whole table into R | `?as.data.table.duckdt` |
@@ -177,6 +183,7 @@ These are S3 methods, so they are not exported functions of their own. Their hel
 |:---|:---|:---|
 | `duckdt.quiet` | unset | Set to `TRUE` **before** attaching the package to hide the startup banner. It also silences the one-off note about binary columns being left out of a table's results. |
 | `duckdt.dm_scheme` | the built-in scheme | The colour scheme for data model diagrams. Set by `dbdt_dm_set_color_scheme()` and `dbdt_dm_add_colors()`. |
+| `duckdt.trace` | unset | Set to `TRUE` to print every SQL statement `duckdt` sends, with the time the database took over it. See [Seeing the SQL](duckdt-query.qmd#sql). |
 | `duckdt.mermaid_src` | Mermaid 11 from the jsDelivr CDN | Where the `dbdt_erd()` page loads Mermaid from. Point it at a local copy or an intranet URL to draw diagrams without internet access. |
 | `foam.sample_dt.color` | `TRUE` | The session default for `color` in `sample_dt()`, `cdt()` and `dupe_dt()`. Set it with `switch_col()`. The name is a legacy of the package's earlier name. |
 | `datatable.print.*` | `data.table`'s own | The print mask reads `datatable.print.topn`, `nrows`, `class`, `rownames`, `colnames`, `keys` and `trunc.cols`, and `datatable.show.indices`. |

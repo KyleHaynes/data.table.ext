@@ -20,7 +20,7 @@ Every other page in this site demonstrates one function at a time. This page str
 
 ## 1. Pick up a warehouse file where you left off {#reconnect}
 
-You saved a table to a `.duckdb` file yesterday (or last sprint). Today you're in a fresh R session and need it back -- this is the [persistence workflow](../WORKFLOW.md) end to end, with real output at every step.
+You saved a table to a `.duckdb` file yesterday (or last sprint). Today you're in a fresh R session and need it back -- this is the [persistence workflow](duckdt-connect.qmd#persist) end to end, with real output at every step.
 
 **Yesterday**, a `data.table` of support tickets gets written to disk:
 

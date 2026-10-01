@@ -34,8 +34,8 @@ ext_function_index <- function() {
         ),
         list(
           theme = "Profile",
-          fns = c("schema_dt", "na_dt", "freq_dt", "spark_dt", "key_dt"),
-          show = c("schema_dt()", "na_dt()", "freq_dt()", "spark_dt()", "key_dt()")
+          fns = c("schema_dt", "na_dt", "freq_dt", "spark_dt", "key_dt", "compare_dt"),
+          show = c("schema_dt()", "na_dt()", "freq_dt()", "spark_dt()", "key_dt()", "compare_dt()")
         ),
         list(
           theme = "Columns",
@@ -64,8 +64,8 @@ ext_function_index <- function() {
         ),
         list(
           theme = "Query",
-          fns = "duckdt_sample",
-          show = c("d[i, j, by]", "head()", "tail()", "duckdt_sample()")
+          fns = c("duckdt_sample", "duckdt_profile", "duckdt_sql"),
+          show = c("d[i, j, by]", "head()", "tail()", "duckdt_sample()", "duckdt_profile()", "duckdt_sql()")
         ),
         list(
           theme = "Join/write",

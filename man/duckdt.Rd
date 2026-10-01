@@ -6,11 +6,11 @@
 \alias{dbdt}
 \title{Wrap an existing database table or view as a duckdt handle}
 \usage{
-duckdt(conn, table, materialized = NA, writable = FALSE)
+duckdt(conn, table, materialized = NA, writable = FALSE, schema = NULL)
 
 \method{print}{duckdt}(x, n = 6L, ..., count = duckdt_dialect(x$conn) != "mssql")
 
-dbdt(conn, table, materialized = NA, writable = FALSE)
+dbdt(conn, table, materialized = NA, writable = FALSE, schema = NULL)
 }
 \arguments{
 \item{conn}{A \code{DBI} connection to DuckDB or Microsoft SQL Server.}
@@ -19,11 +19,16 @@ dbdt(conn, table, materialized = NA, writable = FALSE)
 
 \item{materialized}{Is \code{table} a real, mutable base table (\code{TRUE}) as
 opposed to a read-only view (\code{FALSE})? Only materialized tables support
-\verb{:=} writes. \code{NA} (the default) auto-detects via \code{information_schema}.}
+\verb{:=} writes. \code{NA} (the default) auto-detects it from the catalogue.}
 
 \item{writable}{Allow \verb{:=} and \code{\link[=dbdt_merge]{dbdt_merge()}} to write through this
 handle? Default \code{FALSE} (see Details). Has no effect if \code{materialized}
 is/resolves to \code{FALSE} -- views are never writable regardless.}
+
+\item{schema}{The schema \code{table} is in, e.g. \code{"sales"} for
+\code{sales.orders}. \code{NULL} (the default) resolves the bare name the way the
+database does: the default schema (usually \code{dbo}) on SQL Server, the
+search path on DuckDB.}
 
 \item{x}{A \code{"duckdt"} database handle.}
 
@@ -32,8 +37,11 @@ is/resolves to \code{FALSE} -- views are never writable regardless.}
 \item{...}{Unused.}
 
 \item{count}{Count all rows when printing? Defaults to \code{FALSE} on SQL
-Server to avoid scanning the table just to preview it. An uncounted
-row total is displayed as \verb{?}. \code{nrow()} and \code{dim()} still count exactly.}
+Server to avoid scanning the table just to preview it. Uncounted, a SQL
+Server table shows the row total from its partition metadata, marked
+\code{~} (free to read, and exact unless rows are being written at that
+moment); a view, which has none, shows \verb{?}. \code{nrow()} and \code{dim()} still
+count exactly.}
 }
 \value{
 An object of class \code{"duckdt"}.
@@ -57,6 +65,11 @@ Use \code{dbdt()}, \code{as.dbdt()} and \verb{dbdt_*()} for new code. The origin
 \code{duckdt} names remain available with identical behavior. The S3 classes
 and \verb{duckdt.*} options are retained for compatibility. \code{\link[=dbdt_connect]{dbdt_connect()}}
 opens DuckDB; use a \code{DBI}/\code{odbc} connection for SQL Server.
+
+A handle reads the table's column names and types once, the first time it
+needs them, and keeps them: on a large SQL Server database the catalogue
+lookup can cost more than a small query does. \verb{:=} refreshes them. If the
+table's columns are changed some other way, create a new handle.
 }
 \examples{
 con <- dbdt_connect(quiet = TRUE)
@@ -64,5 +77,10 @@ DBI::dbExecute(con, "CREATE TABLE t (id INTEGER, x DOUBLE)")
 DBI::dbExecute(con, "INSERT INTO t VALUES (1, 10), (2, 20)")
 d <- dbdt(con, "t")
 d
+
+# A table outside the default schema:
+DBI::dbExecute(con, "CREATE SCHEMA sales")
+DBI::dbExecute(con, "CREATE TABLE sales.orders (id INTEGER, total DOUBLE)")
+dbdt(con, "orders", schema = "sales")
 dbdt_disconnect(con)
 }

@@ -27,25 +27,25 @@
 duckdt_example <- function(quiet = FALSE) {
   con <- DBI::dbConnect(duckdb::duckdb())
 
-  DBI::dbExecute(con, "
+  duckdt_execute(con, "
     CREATE TABLE customers (
       customer_id INTEGER PRIMARY KEY,
       name        VARCHAR,
       city        VARCHAR
     )")
-  DBI::dbExecute(con, "
+  duckdt_execute(con, "
     CREATE TABLE items (
       item_id INTEGER PRIMARY KEY,
       label   VARCHAR,
       price   DOUBLE
     )")
-  DBI::dbExecute(con, "
+  duckdt_execute(con, "
     CREATE TABLE orders (
       order_id    INTEGER PRIMARY KEY,
       customer_id INTEGER REFERENCES customers(customer_id),
       ordered_on  DATE
     )")
-  DBI::dbExecute(con, "
+  duckdt_execute(con, "
     CREATE TABLE order_lines (
       order_id INTEGER REFERENCES orders(order_id),
       line_no  INTEGER,
@@ -54,19 +54,19 @@ duckdt_example <- function(quiet = FALSE) {
       PRIMARY KEY (order_id, line_no)
     )")
 
-  DBI::dbExecute(con, "INSERT INTO customers VALUES
+  duckdt_execute(con, "INSERT INTO customers VALUES
     (1, 'Ada Lovelace', 'Perth'),
     (2, 'Grace Hopper', 'Sydney'),
     (3, 'Alan Turing', 'Perth')")
-  DBI::dbExecute(con, "INSERT INTO items VALUES
+  duckdt_execute(con, "INSERT INTO items VALUES
     (1, 'Rubber duck', 9.95),
     (2, 'Keyboard', 129.00),
     (3, 'Monitor', 449.00)")
-  DBI::dbExecute(con, "INSERT INTO orders VALUES
+  duckdt_execute(con, "INSERT INTO orders VALUES
     (100, 1, DATE '2024-03-01'),
     (101, 2, DATE '2024-03-04'),
     (102, 1, DATE '2024-04-11')")
-  DBI::dbExecute(con, "INSERT INTO order_lines VALUES
+  duckdt_execute(con, "INSERT INTO order_lines VALUES
     (100, 1, 1, 3),
     (100, 2, 2, 1),
     (101, 1, 3, 2),

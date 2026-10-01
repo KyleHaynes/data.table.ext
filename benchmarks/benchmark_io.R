@@ -9,7 +9,7 @@
 #   - qs:         qsave()         / qread()                  (if installed)
 #   - duckdt:     as.duckdt(..., copy = TRUE) / as.data.table(duckdt(...))
 #                 i.e. writing/reading a table in a persistent .duckdb file,
-#                 the workflow documented in WORKFLOW.md
+#                 the workflow documented in site/duckdt-connect.qmd#persist
 #
 # The benchmark data is all-character (string) columns of mixed cardinality
 # -- text parsing/encoding is where these formats differ most, whereas an
@@ -124,7 +124,7 @@ bench_size <- function(n, reps, tmpdir) {
     add("qs", "read",  time_it(function() qs::qread(qs_path), reps), file.size(qs_path))
   }
 
-  # duckdt (persistent .duckdb file -- see WORKFLOW.md) --------------------------------
+  # duckdt (persistent .duckdb file -- see site/duckdt-connect.qmd#persist) --------------------------------
   if (file.exists(duckdb_path)) file.remove(duckdb_path)
   add("duckdt (.duckdb)", "write", time_it(function() {
     con <- suppressMessages(dbConnect(duckdb::duckdb(dbdir = duckdb_path)))

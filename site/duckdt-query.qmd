@@ -45,10 +45,10 @@ Every `[` runs **immediately**: one query, one `data.table` back. That keeps the
 |:---|:---|
 | Comparison | `==`, `!=`, `<`, `<=`, `>`, `>=` |
 | Logic | `&`, `\|`, `!` (and `&&`, `\|\|`), parentheses |
-| Membership and range | `%in%`, `%chin%`, `%between%` |
-| Text | `%like%`, `%ilike%`, `%flike%`, `%plike%` |
+| Membership and range | `%in%`, `%chin%`, `%notin%`, `%between%`, `between()` |
+| Text | `%like%`, `%ilike%`, `%flike%`, `%plike%`, `grepl()`, `startsWith()`, `endsWith()` |
 | Missing values | `is.na()` |
-| Arithmetic | `+`, `-`, `*`, `/` |
+| Arithmetic | `+`, `-`, `*`, `/`, `^`, `%%`, `%/%` |
 | Functions | the ones under [Functions](#functions) |
 
 ```{r}
@@ -94,15 +94,16 @@ pricier_than <- function(threshold) items[price > threshold, .(label)]
 pricier_than(50)
 ```
 
-Only *values* travel this way. A call to an R function is not evaluated in R: anything that is not translated is sent to DuckDB **by name**, and fails if DuckDB has no such function. Work out R-side values first, then refer to them by name:
+Only *values* travel this way. A call to an R function is not evaluated in R: the functions under [Functions](#functions) are translated, and anything else is sent to DuckDB **by name**, so it fails if DuckDB has no such function. Work out R-side values first, then refer to them by name:
 
 ```{r}
 #| error: true
-orders[ordered_on >= as.Date("2024-03-05")]
+cutoff_for <- function(month) as.Date(paste0("2024-", month, "-05"))
+orders[ordered_on >= cutoff_for("03")]
 ```
 
 ```{r}
-cutoff <- as.Date("2024-03-05")
+cutoff <- cutoff_for("03")
 orders[ordered_on >= cutoff]
 ```
 
@@ -135,26 +136,38 @@ items[, .(avg_price = mean(price))]
 
 ### Functions {#functions}
 
-Some R function names are renamed to their DuckDB equivalent. Any other call is sent to DuckDB by name, upper-cased, so any DuckDB scalar function you can write in R call syntax works: `year()`, `substr()`, `coalesce()`, `regexp_replace()` and so on.
+These R and `data.table` functions are translated, so they mean in a query what they mean in R. A `pkg::` prefix is fine (`data.table::fifelse()`).
 
-| In R | Sent to DuckDB as |
+| Kind | Functions |
 |:---|:---|
-| `mean()` | `avg()` |
-| `sd()`, `var()` | `stddev()`, `variance()` |
-| `length()` | `count()` |
-| `toupper()`, `tolower()` | `upper()`, `lower()` |
-| `nchar()` | `length()` |
-| `sum()`, `min()`, `max()`, `median()`, `abs()`, `round()` | the same name |
+| Aggregates | `sum()`, `mean()`, `median()`, `min()`, `max()`, `sd()`, `var()`, `length()`, `uniqueN()`, `.N` |
+| Conditions | `ifelse()`, `fifelse()` (with its `na` argument), `fcase()` (with `default`), `fcoalesce()`, `between()` |
+| Text | `paste0()`, `paste()` (with `sep`), `substr()`, `substring()`, `nchar()`, `toupper()`, `tolower()`, `trimws()`, `startsWith()`, `endsWith()`, `grepl()` (with `ignore.case` and `fixed`) |
+| Numbers | `abs()`, `round()`, `trunc()`, `log()` (with `base`), `log2()`, `log10()`, `pmin()`, `pmax()` |
+| Types | `as.numeric()`, `as.double()`, `as.integer()`, `as.character()`, `as.Date()`, `as.IDate()` |
+| Dates | `year()`, `month()`, `quarter()`, `mday()`, `wday()`, `yday()`, `hour()`, `minute()`, `second()`, as in `data.table` (`wday()` counts from Sunday = 1) |
+
+Any other call is sent to DuckDB by name, upper-cased, so any DuckDB function you can write in R call syntax works too: `coalesce()`, `regexp_replace()`, `date_trunc()` and so on.
 
 ```{r}
 customers[, .(initial = substr(name, 1, 1), shout = toupper(name))]
 ```
 
 ```{r}
-orders[, .(n = .N), by = .(year = year(ordered_on))]
+items[, .(label, band = fcase(price < 10, "cheap", price < 100, "mid", default = "dear"))]
 ```
 
-R functions that have no DuckDB function of the same name, such as `ifelse()`, are not available. Write that step in SQL with `DBI::dbGetQuery()`, or do it on the returned `data.table`.
+```{r}
+orders[, .(n = .N, customers = uniqueN(customer_id)), by = .(year = year(ordered_on), q = quarter(ordered_on))]
+```
+
+A comparison can be summed or averaged, as in R: `mean(price > 100)` is the share of rows over 100.
+
+A few results differ from R in ways that follow from SQL:
+
+- `uniqueN()` doesn't count a missing value as a value, so it matches `uniqueN(x, na.rm = TRUE)`.
+- `paste0()` and `paste()` turn a missing value into `""`, where R writes `"NA"`, and DuckDB writes a whole double such as `3` as `3.0`.
+- `paste(collapse = )` combines rows rather than columns and isn't translated.
 
 ## Grouping: `by` {#by}
 
@@ -170,25 +183,29 @@ items[, .(n = .N, avg_price = mean(price)), by = .(pricey = price > 100)][order(
 
 ## Missing values {#na}
 
-`%in%` behaves as in R and never returns `NA`. SQL aggregates already skip `NULL`, so `mean(x)` is the same as R's `mean(x, na.rm = TRUE)`. The `na.rm` argument itself is not translated: it is passed to DuckDB as an extra argument, and DuckDB rejects it.
+`%in%` behaves as in R and never returns `NA`. SQL aggregates already skip `NULL`, so `mean(x)` is the same as R's `mean(x, na.rm = TRUE)`, whether or not you write `na.rm = TRUE`. That argument is accepted and dropped:
 
-```r
+```{r}
 customers[, .(mean_id = mean(customer_id, na.rm = TRUE))]
-#> Error: Binder Error: No function matches the given name and argument types
-#> 'avg(INTEGER, BOOLEAN)'. ...
 ```
 
-Leave `na.rm` out.
+`ifelse()` and `fifelse()` keep R's rule that a missing test gives a missing result, rather than SQL's habit of falling through to the "no" branch.
 
 ## Ordering and row positions {#ordering}
 
-DuckDB tables have no inherent row order, so two things from `data.table` do not carry over: `order()` inside `i`, and row positions such as `d[1:5]`. Neither is meaningful without an explicit sort, and both fail. Sort the result, which is an ordinary `data.table`:
+DuckDB tables have no inherent row order. `order()` in `i` sorts in the database, as `ORDER BY`: `-x` or `decreasing = TRUE` sort descending, and missing values go last, as in R.
+
+```{r}
+items[order(-price), .(label, price)]
+```
+
+Sorting a query in `i` is all-or-nothing, since `i` can hold either a filter or a sort, not both. To filter *and* sort, filter in the database and sort the result, which is an ordinary `data.table`:
 
 ```{r}
 items[price > 5, .(label, price)][order(-price)]
 ```
 
-Without an `order()`, expect no particular row order from any query.
+`order()` can't be combined with `by` (sort the grouped result instead), and row positions such as `d[1:5]` aren't supported; use `head()`. Without an `order()`, expect no particular row order from any query.
 
 ## Peeking and sampling {#peeking}
 
@@ -213,6 +230,32 @@ dbdt_sample(items, 2)
 A negative `n` works as in base R: `head(d, -2)` is everything but the last two rows. `tail()` reflects DuckDB's current scan order and not a guaranteed original order. `dbdt_sample()` samples without replacement; DuckDB's sampling clause has no replacement option. It is a plain function because base `sample()` is not an S3 generic, so `sample(d, n)` would never reach a method.
 
 `nrow()`, `ncol()`, `dim()`, `names()` and `colnames()` also work on a handle.
+
+## Profiling a table {#profile}
+
+`dbdt_profile()` is the database-side [`schema_dt()`](checks.qmd#profile): for every column, the number and share of missing values, the number of distinct values, and the smallest and largest. The database computes all of it in one query, and only the summary comes back, which makes it the way to get to know a table too big to pull into R.
+
+```{r}
+dbdt_profile(orders)
+```
+
+Counting distinct values is the expensive part on a large table; `distinct = FALSE` skips it. `cols =` profiles just some columns.
+
+## Seeing the SQL {#sql}
+
+`dbdt_sql()` takes the same `i`, `j` and `by` as `[` and returns the SQL instead of running it, to check a translation or to take a slow query somewhere that shows its plan (DuckDB's `EXPLAIN ANALYZE`, or SQL Server Management Studio):
+
+```{r}
+dbdt_sql(orders, !is.na(ordered_on), .(n = .N, last = max(ordered_on)), by = customer_id)
+```
+
+To watch every statement `duckdt` sends, catalogue lookups included, with the time each took, turn on tracing:
+
+```{r}
+options(duckdt.trace = TRUE)
+orders[customer_id == 1, .(n = .N)]
+options(duckdt.trace = NULL)
+```
 
 ## Binary columns {#binary}
 
@@ -242,10 +285,10 @@ files[, .(name, bytes = octet_length(payload))]
 ## What is not supported {#not-supported}
 
 - **Lazy, chained queries.** Every `[` runs at once. [`dbdt_temp()`](duckdt-join-write.qmd#temp) is the escape hatch: it runs a query into a temporary table and hands back a handle.
-- **Row positions and `order()` in `i`**, as above.
+- **Row positions in `i`, and `order()` with `by`**, as above.
 - **Grouped `:=`**, that is `by =` together with a write.
 - **`dbdt_sample(replace = TRUE)`.**
-- **`na.rm` and R-only functions** such as `ifelse()` and `as.Date()`.
+- **R functions without a translation or a DuckDB namesake**, such as `format()` or your own functions. Compute R-side values first ([above](#r-values)).
 
 See [Limitations](limitations.qmd) for the full list, including the caveats that apply to writes and joins.
 

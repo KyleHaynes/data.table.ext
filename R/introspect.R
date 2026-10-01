@@ -17,7 +17,23 @@
 #' @export
 duckdt_tables <- function(conn) {
   conn <- duckdt_unwrap_conn(conn)
-  out <- data.table::setDT(DBI::dbGetQuery(conn, "
+  if (duckdt_dialect(conn) == "mssql") {
+    # The same objects as INFORMATION_SCHEMA.TABLES, less the ones SQL Server
+    # ships itself (so that, like duckdt_schema(), this skips sysdiagrams).
+    out <- tryCatch(duckdt_get_query(conn, "
+      SELECT s.name AS table_schema, o.name AS table_name,
+        CASE o.type WHEN 'V' THEN 'VIEW' ELSE 'BASE TABLE' END AS table_type
+      FROM sys.objects o JOIN sys.schemas s ON s.schema_id = o.schema_id
+      WHERE o.type IN ('U', 'V') AND o.is_ms_shipped = 0
+      ORDER BY s.name, o.name
+    "), error = function(e) NULL)
+    if (is.data.frame(out)) {
+      out <- data.table::setDT(out)
+      data.table::setnames(out, c("schema", "name", "type"))
+      return(out[])
+    }
+  }
+  out <- data.table::setDT(duckdt_get_query(conn, "
     SELECT table_schema, table_name, table_type
     FROM information_schema.tables
     WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
@@ -53,11 +69,15 @@ duckdt_schema <- function(conn, table = NULL) {
   if (!is.null(table) && (!is.character(table) || length(table) != 1L || is.na(table))) {
     stop("`table` must be NULL or a single table name.", call. = FALSE)
   }
+  if (duckdt_dialect(conn) == "mssql") {
+    out <- duckdt_schema_mssql(conn, table)
+    if (!is.null(out)) return(out)
+  }
   table_filter <- if (is.null(table)) "" else paste0(
     " AND table_name = ", DBI::dbQuoteString(conn, table)
   )
 
-  cols <- data.table::setDT(DBI::dbGetQuery(conn, paste0("
+  cols <- data.table::setDT(duckdt_get_query(conn, paste0("
     SELECT
       table_schema, table_name, column_name, data_type, ordinal_position
     FROM information_schema.columns
@@ -69,7 +89,7 @@ duckdt_schema <- function(conn, table = NULL) {
   pk_filter <- if (is.null(table)) "" else paste0(
     " AND tc.table_name = ", DBI::dbQuoteString(conn, table)
   )
-  pks <- data.table::setDT(DBI::dbGetQuery(conn, paste0("
+  pks <- data.table::setDT(duckdt_get_query(conn, paste0("
     SELECT tc.table_schema, tc.table_name, kcu.column_name
     FROM information_schema.table_constraints tc
     JOIN information_schema.key_column_usage kcu
@@ -85,6 +105,40 @@ duckdt_schema <- function(conn, table = NULL) {
     duckdt_row_key(pks$schema, pks$table, pks$column)
 
   cols[]
+}
+
+# SQL Server's INFORMATION_SCHEMA.COLUMNS evaluates OBJECT_DEFINITION() and
+# COLUMNPROPERTY() for every column, and KEY_COLUMN_USAGE is slower still, so
+# on a database with thousands of tables the portable queries above take a
+# long time to say what sys.columns says in one join. The type is reported
+# the way INFORMATION_SCHEMA does: the base system type, or the user type's
+# own name for a CLR type. NULL (so the portable queries run instead) if the
+# catalogue views can't be read.
+duckdt_schema_mssql <- function(conn, table = NULL) {
+  res <- tryCatch(duckdt_get_query(conn, paste0("
+    SELECT
+      s.name AS table_schema, o.name AS table_name, c.name AS column_name,
+      ISNULL(TYPE_NAME(c.system_type_id), TYPE_NAME(c.user_type_id)) AS data_type,
+      c.column_id AS ordinal_position,
+      CASE WHEN pk.column_id IS NULL THEN 0 ELSE 1 END AS primary_key
+    FROM sys.columns c
+    JOIN sys.objects o ON o.object_id = c.object_id
+    JOIN sys.schemas s ON s.schema_id = o.schema_id
+    LEFT JOIN (
+      SELECT ic.object_id, ic.column_id
+      FROM sys.indexes i
+      JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+      WHERE i.is_primary_key = 1
+    ) pk ON pk.object_id = c.object_id AND pk.column_id = c.column_id
+    WHERE o.type IN ('U', 'V') AND o.is_ms_shipped = 0",
+    if (!is.null(table)) paste0(" AND o.name = ", DBI::dbQuoteString(conn, table)), "
+    ORDER BY s.name, o.name, c.column_id
+  ")), error = function(e) NULL)
+  if (!is.data.frame(res)) return(NULL)
+  out <- data.table::setDT(res)
+  data.table::setnames(out, c("schema", "table", "column", "type", "ordinal_position", "primary_key"))
+  data.table::set(out, j = "primary_key", value = as.logical(out$primary_key))
+  out[]
 }
 
 #' List foreign-key relationships between tables in a database
@@ -146,7 +200,7 @@ duckdt_relationships <- function(conn) {
     "
   }
   fks <- tryCatch(
-    DBI::dbGetQuery(conn, sql),
+    duckdt_get_query(conn, sql),
     error = function(e) data.frame(
       fk_schema = character(), fk_table = character(), fk_column = character(),
       pk_schema = character(), pk_table = character(), pk_column = character()

@@ -107,7 +107,7 @@ duckdt_merge <- function(x, y, by = NULL, update = TRUE, insert = TRUE, delete =
 
   update_cols <- setdiff(intersect(x_cols, y_cols), by)
   dialect <- duckdt_dialect(conn)
-  tmp_name <- paste0(x$tbl, "__duckdt_merge_tmp")
+  tmp_name <- duckdt_staging_name("merge")
 
   duckdt_merge_stage(conn, y, y_is_duckdt, c(by, update_cols), tmp_name, dialect)
   on.exit(duckdt_merge_drop_tmp(conn, tmp_name, dialect), add = TRUE)
@@ -130,16 +130,16 @@ duckdt_merge_stage <- function(conn, y, y_is_duckdt, cols, tmp_name, dialect) {
   if (dialect == "mssql") {
     if (y_is_duckdt) {
       qtmp_str <- DBI::dbQuoteString(conn, tmp_name)
-      DBI::dbExecute(conn, paste0("IF OBJECT_ID(", qtmp_str, ", 'U') IS NOT NULL DROP TABLE ", qtmp))
-      DBI::dbExecute(conn, paste0(
+      duckdt_execute(conn, paste0("IF OBJECT_ID(", qtmp_str, ", 'U') IS NOT NULL DROP TABLE ", qtmp))
+      duckdt_execute(conn, paste0(
         "SELECT ", select_list, " INTO ", qtmp, " FROM ", duckdt_qtbl(y)
       ))
     } else {
-      DBI::dbWriteTable(conn, tmp_name, as.data.frame(y)[cols], overwrite = TRUE)
+      duckdt_write_table(conn, tmp_name, as.data.frame(y)[cols], overwrite = TRUE)
     }
   } else {
     if (y_is_duckdt) {
-      DBI::dbExecute(conn, paste0(
+      duckdt_execute(conn, paste0(
         "CREATE OR REPLACE TEMP TABLE ", qtmp, " AS SELECT ", select_list,
         " FROM ", duckdt_qtbl(y)
       ))
@@ -148,7 +148,7 @@ duckdt_merge_stage <- function(conn, y, y_is_duckdt, cols, tmp_name, dialect) {
       qsrc <- DBI::dbQuoteIdentifier(conn, src_name)
       duckdb::duckdb_register(conn, src_name, as.data.frame(y)[cols])
       on.exit(try(duckdb::duckdb_unregister(conn, src_name), silent = TRUE), add = TRUE)
-      DBI::dbExecute(conn, paste0(
+      duckdt_execute(conn, paste0(
         "CREATE OR REPLACE TEMP TABLE ", qtmp, " AS SELECT ", select_list, " FROM ", qsrc
       ))
     }
@@ -160,9 +160,9 @@ duckdt_merge_drop_tmp <- function(conn, tmp_name, dialect) {
   qtmp <- DBI::dbQuoteIdentifier(conn, tmp_name)
   if (dialect == "mssql") {
     qtmp_str <- DBI::dbQuoteString(conn, tmp_name)
-    try(DBI::dbExecute(conn, paste0("IF OBJECT_ID(", qtmp_str, ", 'U') IS NOT NULL DROP TABLE ", qtmp)), silent = TRUE)
+    try(duckdt_execute(conn, paste0("IF OBJECT_ID(", qtmp_str, ", 'U') IS NOT NULL DROP TABLE ", qtmp)), silent = TRUE)
   } else {
-    try(DBI::dbExecute(conn, paste0("DROP TABLE IF EXISTS ", qtmp)), silent = TRUE)
+    try(duckdt_execute(conn, paste0("DROP TABLE IF EXISTS ", qtmp)), silent = TRUE)
   }
 }
 
@@ -183,7 +183,7 @@ duckdt_merge_exec_duckdb <- function(x, tmp_name, by, update_cols, update, inser
     if (update && length(update_cols) > 0) {
       qup <- vapply(update_cols, function(nm) as.character(DBI::dbQuoteIdentifier(conn, nm)), character(1))
       set_list <- paste(sprintf("%s = %s.%s", qup, qtmp, qup), collapse = ", ")
-      DBI::dbExecute(conn, paste0(
+      duckdt_execute(conn, paste0(
         "UPDATE ", qtbl, " SET ", set_list, " FROM ", qtmp, " WHERE ", match_sql
       ))
     }
@@ -191,13 +191,13 @@ duckdt_merge_exec_duckdb <- function(x, tmp_name, by, update_cols, update, inser
       all_cols <- c(by, update_cols)
       qall <- vapply(all_cols, function(nm) as.character(DBI::dbQuoteIdentifier(conn, nm)), character(1))
       col_list <- paste(qall, collapse = ", ")
-      DBI::dbExecute(conn, paste0(
+      duckdt_execute(conn, paste0(
         "INSERT INTO ", qtbl, " (", col_list, ") SELECT ", col_list, " FROM ", qtmp,
         " WHERE NOT EXISTS (SELECT 1 FROM ", qtbl, " WHERE ", match_sql, ")"
       ))
     }
     if (delete) {
-      DBI::dbExecute(conn, paste0(
+      duckdt_execute(conn, paste0(
         "DELETE FROM ", qtbl, " WHERE NOT EXISTS (SELECT 1 FROM ", qtmp, " WHERE ", match_sql, ")"
       ))
     }
@@ -240,5 +240,5 @@ duckdt_merge_exec_mssql <- function(x, tmp_name, by, update_cols, update, insert
     "MERGE INTO %s AS t USING %s AS s ON (%s) %s;",
     qtbl, qtmp, on_clause, paste(clauses, collapse = " ")
   )
-  DBI::dbExecute(conn, sql)
+  duckdt_execute(conn, sql)
 }

@@ -5,9 +5,23 @@
 \alias{dbdt_dm_query}
 \title{Build a SELECT statement from a data model}
 \usage{
-duckdt_dm_query(dm, tables, columns = NULL, where = NULL, limit = NULL)
+duckdt_dm_query(
+  dm,
+  tables,
+  columns = NULL,
+  where = NULL,
+  limit = NULL,
+  dialect = NULL
+)
 
-dbdt_dm_query(dm, tables, columns = NULL, where = NULL, limit = NULL)
+dbdt_dm_query(
+  dm,
+  tables,
+  columns = NULL,
+  where = NULL,
+  limit = NULL,
+  dialect = NULL
+)
 }
 \arguments{
 \item{dm}{A \code{"duckdt_data_model"} from \code{\link[=dbdt_data_model]{dbdt_data_model()}}, or anything
@@ -24,6 +38,10 @@ mapped to \code{character(0)} contributes none.}
 verbatim.}
 
 \item{limit}{Optional row limit.}
+
+\item{dialect}{The SQL dialect to write: \code{"duckdb"} (\verb{LIMIT n}) or
+\code{"mssql"} (\verb{SELECT TOP (n)}). Taken from the connection when \code{dm} is
+one (or a handle); otherwise \code{"duckdb"}.}
 }
 \value{
 A length-1 character vector of SQL, with the tables that could not

@@ -99,10 +99,7 @@ duckdt_drop <- function(x, force = FALSE) {
 # information_schema table_type "LOCAL TEMPORARY", and on MS SQL Server the
 # name may not be resolvable by dbExistsTable() at all.
 duckdt_temp_handle <- function(conn, name) {
-  structure(
-    list(conn = conn, tbl = name, materialized = TRUE, writable = TRUE, temporary = TRUE),
-    class = "duckdt"
-  )
+  duckdt_handle(conn, name, materialized = TRUE, writable = TRUE, temporary = TRUE)
 }
 
 # Names are unique per session so repeated subsets don't silently overwrite
@@ -113,26 +110,57 @@ duckdt_temp_name <- function(base) {
   paste0("duckdt_temp_", gsub("[^A-Za-z0-9]", "_", base), "_", n)
 }
 
+# A name for a short-lived staging table (dbdt_merge(), dbdt_join()) that no
+# existing object can have: a random suffix rather than one derived from the
+# target table, so staging can never replace -- and then drop -- a table of
+# the user's that happens to share the name. tempfile() supplies the
+# randomness without touching the session's random number stream.
+duckdt_staging_name <- function(label) {
+  paste0("duckdt_stage_", label, "_", sub("^file", "", basename(tempfile())))
+}
+
 duckdt_create_temp <- function(conn, name, sql, dialect) {
   qname <- DBI::dbQuoteIdentifier(conn, name)
   if (dialect == "mssql") {
+    # On SQL Server the "temporary" table is an ordinary one, so replacing
+    # whatever already has this name could destroy real data. Only a table
+    # this session made with dbdt_temp() may be replaced.
+    if (!name %in% duckdt_env$temp_tables && duckdt_mssql_exists(conn, name)) {
+      stop(sprintf(paste0(
+        "duckdt_temp: a table named '%s' already exists, and this session did not ",
+        "create it. Pick another `name`, or drop it yourself if it is yours to drop."
+      ), name), call. = FALSE)
+    }
     # T-SQL has no CREATE TEMP TABLE ... AS; SELECT ... INTO is the
     # equivalent, and a derived table needs an alias.
     duckdt_drop_table(conn, name, dialect)
-    DBI::dbExecute(conn, paste0("SELECT * INTO ", qname, " FROM (", sql, ") AS duckdt_src"))
+    duckdt_execute(conn, paste0("SELECT * INTO ", qname, " FROM (", sql, ") AS duckdt_src"))
+    duckdt_env$temp_tables <- union(duckdt_env$temp_tables, name)
   } else {
-    DBI::dbExecute(conn, paste0("CREATE OR REPLACE TEMP TABLE ", qname, " AS ", sql))
+    duckdt_execute(conn, paste0("CREATE OR REPLACE TEMP TABLE ", qname, " AS ", sql))
   }
   invisible(NULL)
+}
+
+# Does an object of this name exist? Unanswerable (an error) counts as no,
+# matching the IF OBJECT_ID(...) guard every SQL Server drop already has.
+duckdt_mssql_exists <- function(conn, name) {
+  res <- tryCatch(
+    duckdt_get_query(conn, paste0(
+      "SELECT OBJECT_ID(", DBI::dbQuoteString(conn, name), ") AS id"
+    )),
+    error = function(e) NULL
+  )
+  is.data.frame(res) && nrow(res) == 1L && !is.na(res[[1]][1])
 }
 
 duckdt_drop_table <- function(conn, name, dialect) {
   qname <- DBI::dbQuoteIdentifier(conn, name)
   if (dialect == "mssql") {
     qname_str <- DBI::dbQuoteString(conn, name)
-    DBI::dbExecute(conn, paste0("IF OBJECT_ID(", qname_str, ", 'U') IS NOT NULL DROP TABLE ", qname))
+    duckdt_execute(conn, paste0("IF OBJECT_ID(", qname_str, ", 'U') IS NOT NULL DROP TABLE ", qname))
   } else {
-    DBI::dbExecute(conn, paste0("DROP TABLE IF EXISTS ", qname))
+    duckdt_execute(conn, paste0("DROP TABLE IF EXISTS ", qname))
   }
   invisible(NULL)
 }

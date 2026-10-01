@@ -21,6 +21,9 @@
 #' @param where Optional SQL predicate, inserted as the `WHERE` clause
 #'   verbatim.
 #' @param limit Optional row limit.
+#' @param dialect The SQL dialect to write: `"duckdb"` (`LIMIT n`) or
+#'   `"mssql"` (`SELECT TOP (n)`). Taken from the connection when `dm` is
+#'   one (or a handle); otherwise `"duckdb"`.
 #'
 #' @return A length-1 character vector of SQL, with the tables that could not
 #'   be joined in its `"unjoined"` attribute.
@@ -33,7 +36,13 @@
 #' cat(dbdt_dm_query(dm, c("orders", "customers"),
 #'                     columns = list(orders = "total", customers = "name")))
 #' @export
-duckdt_dm_query <- function(dm, tables, columns = NULL, where = NULL, limit = NULL) {
+duckdt_dm_query <- function(dm, tables, columns = NULL, where = NULL, limit = NULL,
+                            dialect = NULL) {
+  if (is.null(dialect)) {
+    conn <- if (is_duckdt_data_model(dm)) NULL else duckdt_unwrap_conn(dm)
+    dialect <- if (duckdt_is_connection(conn)) duckdt_dialect(conn) else "duckdb"
+  }
+  dialect <- match.arg(dialect, c("duckdb", "mssql"))
   dm <- duckdt_as_data_model(dm)
   tabs <- as.data.frame(dm$tables)
   unknown <- setdiff(tables, tabs$table)
@@ -67,8 +76,10 @@ duckdt_dm_query <- function(dm, tables, columns = NULL, where = NULL, limit = NU
   }))
   if (!length(select)) select <- "  *"
 
+  # T-SQL has no LIMIT; it caps rows with TOP after SELECT.
+  top <- if (!is.null(limit) && dialect == "mssql") paste0(" TOP (", as.integer(limit), ")") else ""
   sql <- paste0(
-    "SELECT\n", paste(select, collapse = ",\n"),
+    "SELECT", top, "\n", paste(select, collapse = ",\n"),
     "\nFROM ", duckdt_qualified(tabs, plan$order[1]), " AS ", alias[[plan$order[1]]]
   )
   for (j in plan$joins) {
@@ -83,7 +94,7 @@ duckdt_dm_query <- function(dm, tables, columns = NULL, where = NULL, limit = NU
     )
   }
   if (!is.null(where) && nzchar(where)) sql <- paste0(sql, "\nWHERE ", where)
-  if (!is.null(limit)) sql <- paste0(sql, "\nLIMIT ", as.integer(limit))
+  if (!is.null(limit) && dialect != "mssql") sql <- paste0(sql, "\nLIMIT ", as.integer(limit))
 
   attr(sql, "unjoined") <- plan$unjoined
   sql

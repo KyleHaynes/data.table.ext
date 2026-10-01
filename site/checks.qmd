@@ -75,6 +75,25 @@ key_dt(orders)
 
 Candidates come from the data alone, so a coincidence can qualify, as `customer, qty` does here. Which one is meaningful is your call.
 
+### `compare_dt()`: what changed between two versions {#compare-dt}
+
+Matches two versions of a table on their key and lists every difference in one long table: rows only in the first, rows only in the second, and for rows in both, each value that changed. Use it to reconcile an extract with its source, or to see what a rerun changed.
+
+```{r}
+last_week <- data.table(id = 1:4, name = c("Ada", "Grace", "Alan", "Edsger"), score = c(10, 12, 9, 7))
+this_week <- data.table(id = 2:5, name = c("Grace", "alan", "Edsger", "Barbara"), score = c(12, 9, 7.5, 11))
+diffs <- compare_dt(last_week, this_week, by = "id")
+diffs
+```
+
+The values are shown as text, so columns of any type fit in one table. A summary of the counts, and the columns only one table has, ride along as attributes:
+
+```{r}
+attr(diffs, "summary")
+```
+
+Two missing values count as equal. `tolerance` treats numbers that differ by no more than it as equal, and `cols` limits which columns are compared. The key must be unique in each table; [`dupe_dt()`](#problems) finds the rows where it isn't.
+
 ## Find problems {#problems}
 
 ### `dupe_dt()`: duplicate rows
