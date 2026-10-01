@@ -9,7 +9,9 @@
 \arguments{
 \item{x}{A \code{"duckdt"} object.}
 
-\item{i}{Optional row filter, e.g. \code{cyl == 6}.}
+\item{i}{Optional row filter, e.g. \code{cyl == 6}, or \code{order(...)} to sort
+the rows (\code{-x} or \code{decreasing = TRUE} for descending; missing values
+last, as in R). Sorting can't be combined with \code{by}.}
 
 \item{j}{Optional column selection/computation via \code{.(...)}/\code{list(...)},
 a bare column name, or a \verb{:=} assignment.}

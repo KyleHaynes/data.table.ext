@@ -55,10 +55,12 @@ duckdt_dm_dot <- function(dm, view = c("all", "keys_only", "title_only"),
   segments <- unique(stats::na.omit(tabs$segment))
   seg_id <- stats::setNames(seq_along(segments), segments)
 
+  # Split once rather than scanning every column for every table.
+  rows_by_table <- split(seq_len(nrow(cols)), factor(cols$table, levels = tabs$table))
   nodes <- vapply(seq_len(nrow(tabs)), function(i) {
     tab <- tabs$table[i]
     label <- duckdt_dot_label(
-      cols[cols$table == tab, , drop = FALSE],
+      cols[rows_by_table[[i]], , drop = FALSE],
       title = tab,
       palette_id = tabs$display[i],
       col_attr = col_attr,

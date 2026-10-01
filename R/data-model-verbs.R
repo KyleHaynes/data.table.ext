@@ -167,33 +167,44 @@ duckdt_dm_infer_references <- function(dm, quiet = FALSE) {
     return(dm)
   }
 
-  candidates <- lapply(seq_len(nrow(single_key)), function(i) {
-    tab <- single_key$table[i]
-    key <- single_key$column[i]
-    bare <- sub("^.*\\.", "", tab)
-    stems <- unique(c(bare, duckdt_singular(bare)))
-    list(
-      table = tab, column = key, type = single_key$type[i],
-      names = unique(tolower(c(key, paste0(stems, "_", key), paste0(stems, key))))
-    )
-  })
+  # Every name a column could have to point at each candidate table: the key
+  # itself, and the table's name (and its singular) glued to the key. Built
+  # as one long lookup and joined against the columns in a single pass, since
+  # comparing every column with every table one by one is far too slow on a
+  # schema with thousands of tables.
+  bare <- sub("^.*\\.", "", single_key$table)
+  key <- single_key$column
+  aliases <- unique(data.frame(
+    name = tolower(c(
+      key,
+      paste0(bare, "_", key), paste0(bare, key),
+      paste0(duckdt_singular(bare), "_", key), paste0(duckdt_singular(bare), key)
+    )),
+    cand = rep(seq_len(nrow(single_key)), 5L),
+    stringsAsFactors = FALSE
+  ))
 
-  added <- character()
-  for (i in seq_len(nrow(cols))) {
-    if (!is.na(cols$ref[i])) next
-    name <- tolower(cols$column[i])
-    if (name == "id") next
-    hits <- Filter(function(cand) {
-      cand$table != cols$table[i] &&
-        name %in% cand$names &&
-        duckdt_type_family(cols$type[i]) == duckdt_type_family(cand$type)
-    }, candidates)
-    if (length(hits) != 1L) next
-    cols$ref[i] <- hits[[1]]$table
-    cols$ref_col[i] <- hits[[1]]$column
-    added <- c(added, sprintf("%s$%s -> %s$%s",
-      cols$table[i], cols$column[i], hits[[1]]$table, hits[[1]]$column))
-  }
+  open <- which(is.na(cols$ref) & tolower(cols$column) != "id")
+  pairs <- merge(
+    data.frame(row = open, name = tolower(cols$column[open]), stringsAsFactors = FALSE),
+    aliases,
+    by = "name"
+  )
+  fam <- duckdt_type_family(cols$type)
+  cand_fam <- duckdt_type_family(single_key$type)
+  pairs <- pairs[
+    single_key$table[pairs$cand] != cols$table[pairs$row] &
+      cand_fam[pairs$cand] == fam[pairs$row], , drop = FALSE
+  ]
+  # A column that could point at more than one table is ambiguous: skip it.
+  pairs <- pairs[!pairs$row %in% pairs$row[duplicated(pairs$row)], , drop = FALSE]
+  pairs <- pairs[order(pairs$row), , drop = FALSE]
+
+  cols$ref[pairs$row] <- single_key$table[pairs$cand]
+  cols$ref_col[pairs$row] <- single_key$column[pairs$cand]
+  added <- sprintf("%s$%s -> %s$%s",
+    cols$table[pairs$row], cols$column[pairs$row],
+    single_key$table[pairs$cand], single_key$column[pairs$cand])
 
   if (!quiet) {
     if (length(added)) {
@@ -371,12 +382,15 @@ duckdt_singular <- function(x) {
 # to a free-text column. Covers DuckDB's and SQL Server's spellings, plus the
 # R classes used by models built from data frames.
 duckdt_type_family <- function(type) {
-  if (is.na(type)) return("unknown")
-  t <- tolower(type)
-  if (grepl("int|serial|^bigint|hugeint", t)) "integer"
-  else if (grepl("char|text|string|uuid|factor", t)) "text"
-  else if (grepl("dec|numeric|real|double|float|money", t)) "numeric"
-  else if (grepl("date|time", t)) "datetime"
-  else if (grepl("bool|logical|bit$", t)) "boolean"
-  else "other"
+  t <- tolower(as.character(type))
+  out <- rep("other", length(t))
+  # Assigned from the least to the most specific test, so the first matching
+  # family in the original if/else order is the one that sticks.
+  out[grepl("bool|logical|bit$", t)] <- "boolean"
+  out[grepl("date|time", t)] <- "datetime"
+  out[grepl("dec|numeric|real|double|float|money", t)] <- "numeric"
+  out[grepl("char|text|string|uuid|factor", t)] <- "text"
+  out[grepl("int|serial|^bigint|hugeint", t)] <- "integer"
+  out[is.na(t)] <- "unknown"
+  out
 }

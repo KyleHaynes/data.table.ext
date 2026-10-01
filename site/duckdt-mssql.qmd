@@ -1,6 +1,6 @@
 ---
 title: "MS SQL Server"
-description: "Use the same [i, j, by] interface against a Microsoft SQL Server connection, and what differs from DuckDB."
+description: "Use the same [i, j, by] interface against a Microsoft SQL Server connection, what differs from DuckDB, and how to keep it fast on a large database."
 ---
 
 `dbdt()` also works against a Microsoft SQL Server connection, for example one from `DBI::dbConnect(odbc::odbc(), ...)`. The dialect is detected from the connection object, since `odbc` tags a SQL Server connection with the class `"Microsoft SQL Server"`, so there is no extra argument to pass.
@@ -10,6 +10,9 @@ con <- DBI::dbConnect(odbc::odbc(), driver = "ODBC Driver 18 for SQL Server", ..
 
 d <- dbdt(con, "existing_table")
 d[cyl == 6, .(avg_hp = mean(hp), n = .N), by = cyl]
+
+# A table outside your default schema:
+orders <- dbdt(con, "orders", schema = "sales")
 ```
 
 ::: {.callout-note}
@@ -17,52 +20,75 @@ d[cyl == 6, .(avg_hp = mean(hp), n = .N), by = cyl]
 There is no SQL Server to connect to when these docs are built, so the code on this page is shown, not executed. The package's SQL Server code paths are tested by checking the T-SQL they emit against a recording fake connection; they are not yet exercised against a live server in the test suite. Treat SQL Server support as young, and check the SQL Server rows of the table below before relying on a feature.
 :::
 
-## Fast exploration
+## Large databases {#large}
+
+On a database with thousands of tables, the catalogue can be slower to ask than the data. `duckdt` keeps its catalogue work to a minimum:
+
+- **A handle looks its columns up once.** `dbdt(con, "t")` finds the table with a single `OBJECT_ID()` lookup in `sys.objects`. The first query reads its columns and types from `sys.columns`, and the handle keeps them, so later queries send only the query itself. `:=` refreshes them; if the table's columns change some other way, make a new handle. ODBC's own catalogue calls (`dbExistsTable()`, `dbListFields()`) search every schema by pattern, and `INFORMATION_SCHEMA` does per-column work, so neither is used.
+- **`print()` doesn't count rows.** It shows the row total from the table's partition metadata, marked `~`, which costs nothing to read and is exact unless rows are being written at that moment. A view has no such metadata and shows `?`. `print(d, count = TRUE)`, `nrow()` and `dim()` still count exactly, with a scan.
+- **`dbdt_schema()`, `dbdt_tables()` and the [data model](duckdt-explore.qmd)** read `sys.columns`, `sys.objects` and `sys.indexes` directly. `dbdt_erd()` and `dbdt_data_model()` handle models with tens of thousands of columns in well under a second of R time, and with `row_counts = TRUE` read every table's count from partition metadata in one query; only views are counted with `count(*)`.
+
+To find where the time goes in a slow call, turn on tracing. Every statement is printed with how long the server took over it:
 
 ```r
-dbdt_tables(con)
-dbdt_schema(con, table = "existing_table")
-head(d, 100)
-dbdt_sample(d, 100, method = "fast")
-print(d)                 # skips the full row count; displays ? for the total
-print(d, count = TRUE)   # opt into an exact count
+options(duckdt.trace = TRUE)
+d[status == "open", .(n = .N), by = region]
+#> [duckdt  0.004s] SELECT o.type FROM sys.objects o WHERE o.object_id = OBJECT_ID(N'[orders]')
+#> [duckdt  0.006s] SELECT c.name AS column_name, ... FROM sys.columns c WHERE ...
+#> [duckdt 12.310s] SELECT "region", count(*) AS "n" FROM "orders" WHERE "status" = 'open' GROUP BY "region"
+options(duckdt.trace = NULL)
 ```
 
-The default `dbdt_sample(d, n)` uses `ORDER BY NEWID()` across the entire
-table. `method = "fast"` first samples pages with `TABLESAMPLE SYSTEM`, then
-randomizes those rows and returns at most `n`. This may return fewer rows or
-zero, and it is not a uniform row sample: rows on the same page are selected
-together. It requires a local base table; use `head()` to preview a view, or
-the default sampling method when you need an exact random sample.
-`nrow()`, `dim()` and `tail()` still count all rows.
+`dbdt_sql()` returns a query's SQL without running it, ready to paste into SQL Server Management Studio to look at its execution plan:
+
+```r
+dbdt_sql(d, status == "open", .(n = .N), by = region)
+```
+
+A query is slow on SQL Server for the usual reasons: a filter that can't use an index, a scan of a wide table. A few habits help:
+
+- **Ask for the columns you need.** `d[i, .(a, b)]` rather than `d[i]` reads and transfers less.
+- **Filter on a column as it is stored.** `d[order_date >= cutoff]` can use an index on `order_date`; `d[year(order_date) == 2024]` cannot.
+- **Profile in the database.** [`dbdt_profile()`](duckdt-query.qmd#profile) summarises every column in one query; `distinct = FALSE` skips the costly distinct counts on a very large table.
+- **Sample pages, not rows.** `dbdt_sample(d, n)` sorts the whole table by `NEWID()`; `method = "fast"` samples pages with `TABLESAMPLE SYSTEM` first. It may return fewer rows (even zero), and rows on the same page come together, so it suits exploration, not statistics. It needs a base table, not a view.
+- **Long `%in%` lists.** Thousands of values in `x %in% ids` make a long `IN (...)` list that SQL Server is slow to compile. Join instead: `dbdt_join(d, data.frame(id = ids), by = "id")` stages the values in a table first.
 
 ## What is the same
 
-Everything that translates `i`, `j` and `by`: comparisons, `&`, `|` and `!`, `%in%` and `%chin%`, `%between%`, `is.na()`, arithmetic, and most scalar and aggregate functions. [Query](duckdt-query.qmd) applies unchanged. So does everything that reads the catalogue: `dbdt_tables()`, `dbdt_schema()`, `dbdt_relationships()`, `dbdt_erd()` and the [data model](duckdt-explore.qmd), which use `information_schema` and, for foreign keys, SQL Server's `sys.foreign_key_columns` catalogue view (so compound keys pair their columns exactly).
+Everything that translates `i`, `j` and `by`: comparisons, `&`, `|` and `!`, `%in%` and `%chin%`, `%between%`, `is.na()`, arithmetic, `order()` in `i`, and the [functions](duckdt-query.qmd#functions) `duckdt` translates. [Query](duckdt-query.qmd) applies unchanged.
 
-## What is dialect-specific
+T-SQL draws a line DuckDB doesn't: a comparison is a condition, not a value, so `SELECT a > 1` and `SUM(a > 1)` are not valid T-SQL, and a `bit` column is a value, not a condition, so `WHERE flag` isn't either. `duckdt` translates across that line, so `d[flag & x > 1]`, `d[, .(share = mean(x > 1))]` and `d[, big := x > 100]` all work as they do in R.
+
+## What is dialect-specific {#dialect}
 
 | Feature | DuckDB | SQL Server |
 |:---|:---|:---|
 | `head()` and `print()` | `LIMIT n` | `TOP (n)` |
 | `tail()` | `LIMIT n OFFSET k` | `ORDER BY (SELECT NULL) OFFSET k ROWS FETCH NEXT n ROWS ONLY` |
 | `dbdt_sample()` | `USING SAMPLE reservoir(n ROWS)` | `ORDER BY NEWID()` by default; `method = "fast"` uses approximate page sampling with `TABLESAMPLE SYSTEM` first. |
+| `order()` in `i` | `ORDER BY x NULLS LAST` | `ORDER BY CASE WHEN x IS NULL THEN 1 ELSE 0 END, x`, since T-SQL has no `NULLS LAST` |
 | `%flike%` (literal substring) | `contains()` | `CHARINDEX(...) > 0` |
-| `%like%`, `%ilike%`, `%plike%` (regular expressions) | `regexp_matches()` | `REGEXP_LIKE()`, which needs SQL Server 2025 (or Azure SQL Database, Managed Instance or Fabric SQL DB) and database compatibility level 170 or higher. On an older server it surfaces as a plain "not a recognized built-in function name" error from the server. |
-| `median()` | `median()` | `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ...)`. T-SQL requires an `OVER` clause on `PERCENTILE_CONT`, so `median()` is not reliable against SQL Server yet. |
+| `%like%`, `%ilike%`, `%plike%`, `grepl()` | `regexp_matches()` | Plain text, optionally anchored with `^` or `$`, becomes `LIKE` (which can use an index for a prefix). Anything else needs `REGEXP_LIKE()`: SQL Server 2025 (or Azure SQL Database, Managed Instance or Fabric SQL DB) at database compatibility level 170 or higher; an older server says "not a recognized built-in function name". |
+| Case in text matching | Exact for `%like%` | `LIKE` follows the column's collation, usually case-insensitive, as `==` already does on SQL Server. |
+| `mean()` | `avg()` | `AVG(CAST(x AS FLOAT))`, since T-SQL averages integers as integers |
+| `/` | `/` | The left side is cast to `FLOAT`, since T-SQL divides integers as integers |
+| `median()` | `median()` | T-SQL's `PERCENTILE_CONT` is a window function only, so the median is computed over the group in a subquery and picked up with `MAX()`. It works in `j`, not in `i` or `:=`. |
 | `sd()`, `var()`, `nchar()` | `stddev()`, `variance()`, `length()` | `stdev()`, `var()`, `len()` |
+| `round(x)`, `trunc(x)`, `trimws()` | the same | `ROUND(x, 0)`, `ROUND(x, 0, 1)`, `LTRIM(RTRIM())` |
 | Logical literals | `TRUE`, `FALSE` | `1`, `0` |
-| [`:=`](duckdt-join-write.qmd#write) | `CREATE OR REPLACE TABLE ... AS SELECT` | `SELECT ... INTO` a new table, then `sp_rename`, in a transaction. Not a true atomic replace: permissions and triggers on the original table are not preserved. |
+| [`:=`](duckdt-join-write.qmd#write) | `UPDATE`, `ALTER TABLE ... ADD COLUMN`, `DROP COLUMN`; a whole-column assignment that changes the type uses `ALTER COLUMN ... SET DATA TYPE ... USING` | `UPDATE`, `ALTER TABLE ... ADD` and `DROP COLUMN`, in a transaction. Keys, indexes, constraints, permissions and triggers are kept. A new column's type comes from `sys.dm_exec_describe_first_result_set()`, widened for text; an existing column keeps its type. |
 | [`dbdt_merge()`](duckdt-join-write.qmd#merge) | `UPDATE ... FROM`, an anti-join `INSERT` and `DELETE`, in a transaction | One native `MERGE INTO ... USING ... ON (...) WHEN MATCHED ...` statement |
-| [`dbdt_temp()`](duckdt-join-write.qmd#temp) | `CREATE OR REPLACE TEMP TABLE`, gone when the connection closes | `SELECT ... INTO` an *ordinary* table on the current schema, which outlives the session. Drop it with `dbdt_drop()`. |
+| [`dbdt_temp()`](duckdt-join-write.qmd#temp) | `CREATE OR REPLACE TEMP TABLE`, gone when the connection closes | `SELECT ... INTO` an *ordinary* table on the current schema, which outlives the session. Drop it with `dbdt_drop()`. It refuses to replace a table of the same name that this session didn't create. |
 | [`dbdt_join()`](duckdt-join-write.qmd#join) | `INNER`, `LEFT`, `RIGHT`, `FULL OUTER JOIN` | The same; these are standard SQL |
+| `dbdt_dm_query(limit = )` | `LIMIT n` | `SELECT TOP (n)`; the dialect is taken from the connection, or given with `dialect = "mssql"` |
 | Binary columns | `BLOB`, `BIT` | `binary`, `varbinary`, `image`, and `timestamp` and `rowversion`, which are binary underneath. Left out of results, with a note. |
 
 If `by` is omitted, `dbdt_merge()` defaults to every column `x` and `y` share, on SQL Server as on DuckDB; pass `by =` explicitly whenever `y` carries value columns that should be updated rather than matched on.
+
+`dbdt_merge()`, `dbdt_join()` with an R data frame, and `dbdt_temp()` create ordinary tables on SQL Server, so they need permission to create tables in the database. Staging tables get random names, so they can't collide with yours, and are dropped when the call finishes.
 
 ## What is not supported
 
 - **Zero-copy `as.dbdt(x)`.** Registering an R data frame as a view with no copy is a DuckDB mechanism. Against SQL Server, use `as.dbdt(x, copy = TRUE)`.
 - **`dbdt_csv()` and `dbdt_parquet()`.** They are built on DuckDB's `read_csv_auto` and `read_parquet` and stay DuckDB-only.
 - **List-columns.**
-- **`limit` in `dbdt_dm_query()`.** It appends a `LIMIT` clause, which T-SQL does not have. Leave `limit` unset for SQL Server, or add `TOP` yourself.

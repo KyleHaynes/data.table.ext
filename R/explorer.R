@@ -127,7 +127,8 @@ duckdt_explorer_server <- function(dm, conn) {
       duckdt_dm_query(
         dm, input$tables, columns = selected_columns(),
         where = if (nzchar(input$where)) input$where else NULL,
-        limit = input$limit
+        limit = input$limit,
+        dialect = if (is.null(conn)) "duckdb" else duckdt_dialect(conn)
       )
     })
 
@@ -164,7 +165,7 @@ duckdt_explorer_server <- function(dm, conn) {
     preview <- shiny::eventReactive(input$run, {
       shiny::req(conn, length(input$tables) > 0)
       tryCatch(
-        data.table::setDT(DBI::dbGetQuery(conn, sql()))[],
+        data.table::setDT(duckdt_get_query(conn, sql()))[],
         error = function(e) conditionMessage(e)
       )
     })

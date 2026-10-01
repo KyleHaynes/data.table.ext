@@ -552,7 +552,7 @@ duckdt_erd(con)
 **Read it**
 
 - `README.md` — the full tour
-- `WORKFLOW.md` — saving a `data.table` to a file and coming back to it later
+- `site/duckdt-connect.qmd#persist` — saving a `data.table` to a file and coming back to it later
 - `?duckdt_erd`, `?duckdt_explorer` — the visual side
 
 ```{r}

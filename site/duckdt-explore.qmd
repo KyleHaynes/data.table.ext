@@ -16,7 +16,7 @@ con <- dbdt_example()
 
 ## Look around {#look-around}
 
-Three functions read the database's own catalogue. They use the portable `information_schema` views, so they work on both DuckDB and MS SQL Server, and each accepts a plain `DBI` connection or a `"duckdt"` handle.
+Three functions read the database's own catalogue: DuckDB's portable `information_schema` views, or on SQL Server its faster `sys.*` catalogue views. Each accepts a plain `DBI` connection or a `"duckdt"` handle.
 
 ```{r}
 dbdt_tables(con)

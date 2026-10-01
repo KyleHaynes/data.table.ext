@@ -6,12 +6,13 @@ duckdt_to_json <- function(x) {
 
   if (is.data.frame(x)) {
     if (nrow(x) == 0) return("[]")
-    rows <- vapply(seq_len(nrow(x)), function(i) {
-      fields <- vapply(names(x), function(nm) {
-        paste0(duckdt_json_string(nm), ":", duckdt_json_scalar(x[[nm]][i]))
-      }, character(1))
-      paste0("{", paste(fields, collapse = ","), "}")
-    }, character(1))
+    # Column by column rather than cell by cell: a data model of a large
+    # database has tens of thousands of rows, and per-cell escaping made
+    # serialising it take longer than reading the catalogue.
+    fields <- lapply(names(x), function(nm) {
+      paste0(duckdt_json_string(nm), ":", duckdt_json_values(x[[nm]]))
+    })
+    rows <- paste0("{", do.call(paste, c(fields, sep = ",")), "}")
     return(paste0("[", paste(rows, collapse = ","), "]"))
   }
 
@@ -26,14 +27,33 @@ duckdt_to_json <- function(x) {
   }
 
   if (length(x) == 1 && is.null(names(x))) return(duckdt_json_scalar(x))
-  paste0("[", paste(vapply(x, duckdt_json_scalar, character(1)), collapse = ","), "]")
+  paste0("[", paste(duckdt_json_values(x), collapse = ","), "]")
 }
 
 duckdt_json_scalar <- function(x) {
-  if (length(x) == 0 || is.na(x)) return("null")
-  if (is.logical(x)) return(if (x) "true" else "false")
-  if (is.numeric(x)) return(format(x, scientific = FALSE, trim = TRUE))
-  duckdt_json_string(as.character(x))
+  if (length(x) == 0) return("null")
+  duckdt_json_values(x)
+}
+
+# One JSON literal per element of an atomic vector.
+duckdt_json_values <- function(x) {
+  missing <- is.na(x)
+  if (is.logical(x)) {
+    out <- ifelse(x, "true", "false")
+  } else if (is.numeric(x)) {
+    out <- character(length(x))
+    # Whole numbers format identically together or apart; anything with a
+    # fraction is formatted on its own, so one value's decimals can't pad
+    # another's.
+    whole <- !missing & is.finite(x) & x == trunc(x) & abs(x) < 1e15
+    out[whole] <- format(x[whole], scientific = FALSE, trim = TRUE)
+    rest <- !missing & !whole
+    out[rest] <- vapply(x[rest], format, character(1), scientific = FALSE, trim = TRUE)
+  } else {
+    out <- duckdt_json_string(as.character(x))
+  }
+  out[missing] <- "null"
+  out
 }
 
 duckdt_json_string <- function(x) {

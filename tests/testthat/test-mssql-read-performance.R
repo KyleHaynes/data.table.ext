@@ -37,7 +37,10 @@ test_that("fast SQL Server sampling samples pages before random ordering", {
   statements <- character()
   query <- DBI::dbGetQuery
   local_mocked_bindings(dbGetQuery = function(conn, statement, ...) {
-    if (grepl("information_schema", statement, fixed = TRUE)) {
+    # Catalogue lookups go to the real (DuckDB) connection, where the SQL
+    # Server catalogue views don't exist, so duckdt falls back to the
+    # portable ones.
+    if (grepl("information_schema|sys[.]", statement)) {
       return(query(conn, statement, ...))
     }
     statements <<- c(statements, statement)

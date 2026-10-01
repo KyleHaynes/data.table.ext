@@ -93,13 +93,17 @@ duckdt_data_model.default <- function(x, tables = NULL, infer_references = FALSE
 
   tbl$n_rows <- NA_real_
   if (isTRUE(row_counts)) {
-    for (i in seq_len(nrow(tbl))) {
+    # SQL Server keeps every table's row count in its partition metadata:
+    # one catalogue query instead of a full count(*) of each table. Views
+    # have none, and are counted below like everything else.
+    if (duckdt_dialect(conn) == "mssql") tbl$n_rows <- duckdt_mssql_row_counts(conn, tbl)
+    for (i in which(is.na(tbl$n_rows))) {
       qname <- paste0(
         DBI::dbQuoteIdentifier(conn, tbl$schema[i]), ".",
         DBI::dbQuoteIdentifier(conn, tbl$name[i])
       )
       tbl$n_rows[i] <- tryCatch(
-        as.numeric(DBI::dbGetQuery(conn, paste0("SELECT count(*) AS n FROM ", qname))$n[1]),
+        as.numeric(duckdt_get_query(conn, paste0("SELECT count(*) AS n FROM ", qname))$n[1]),
         error = function(e) NA_real_
       )
     }
@@ -119,21 +123,25 @@ duckdt_data_model.default <- function(x, tables = NULL, infer_references = FALSE
     ref_col = NA_character_,
     stringsAsFactors = FALSE
   )
-  for (t in unique(columns$table)) {
-    idx <- which(columns$table == t & cols$primary_key)
-    if (length(idx)) columns$key[idx] <- seq_along(idx)
-  }
+  # Number each table's primary key columns 1, 2, ... in column order. Done
+  # with vector operations throughout: a database with thousands of tables
+  # has tens of thousands of columns, and a per-table scan of all of them is
+  # quadratic.
+  pk <- which(cols$primary_key)
+  if (length(pk)) columns$key[pk] <- stats::ave(pk, columns$table[pk], FUN = seq_along)
 
   fks <- as.data.frame(duckdt_relationships(conn), stringsAsFactors = FALSE)
   if (nrow(fks) > 0) {
     fk_id <- duckdt_dm_table_ids(fks$fk_schema, fks$fk_table, ids = tbl)
     pk_id <- duckdt_dm_table_ids(fks$pk_schema, fks$pk_table, ids = tbl)
     known <- !is.na(fk_id) & !is.na(pk_id) & fk_id %in% tbl$table & pk_id %in% tbl$table
-    for (i in which(known)) {
-      row <- columns$table == fk_id[i] & columns$column == fks$fk_column[i]
-      columns$ref[row] <- pk_id[i]
-      columns$ref_col[row] <- fks$pk_column[i]
-    }
+    row <- match(
+      duckdt_row_key(fk_id[known], fks$fk_column[known]),
+      duckdt_row_key(columns$table, columns$column)
+    )
+    hit <- !is.na(row)
+    columns$ref[row[hit]] <- pk_id[known][hit]
+    columns$ref_col[row[hit]] <- fks$pk_column[known][hit]
   }
 
   dm <- duckdt_dm_new(
@@ -240,6 +248,25 @@ print.duckdt_data_model <- function(x, n = 10L, ...) {
 }
 
 # ---- internals -------------------------------------------------------------
+
+# Row counts of `tbl`'s tables (columns `schema`, `name`) from SQL Server's
+# partition metadata, in one query; NA where there is none (views) or the
+# catalogue can't be read.
+duckdt_mssql_row_counts <- function(conn, tbl) {
+  res <- tryCatch(duckdt_get_query(conn, "
+    SELECT s.name AS table_schema, o.name AS table_name, SUM(p.rows) AS n
+    FROM sys.objects o
+    JOIN sys.schemas s ON s.schema_id = o.schema_id
+    JOIN sys.partitions p ON p.object_id = o.object_id AND p.index_id IN (0, 1)
+    WHERE o.type = 'U'
+    GROUP BY s.name, o.name
+  "), error = function(e) NULL)
+  if (!is.data.frame(res) || !nrow(res)) return(rep(NA_real_, nrow(tbl)))
+  as.numeric(res[[3]])[match(
+    duckdt_row_key(tbl$schema, tbl$name),
+    duckdt_row_key(res[[1]], res[[2]])
+  )]
+}
 
 # A table's identity in the model: its bare name, or "schema.name" when that
 # bare name is ambiguous across schemas. `ids` re-uses the mapping already

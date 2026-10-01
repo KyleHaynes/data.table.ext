@@ -40,28 +40,33 @@ duckdt_select_list <- function(conn, keep, tbl) {
 }
 
 duckdt_binary_cols <- function(x) {
-  types <- duckdt_column_types(x$conn, x$tbl)
+  types <- duckdt_meta(x)
   if (!nrow(types)) return(character(0))
   unique(types$column[duckdt_is_binary_type(types$type, duckdt_dialect(x$conn))])
 }
 
 # information_schema.columns is the one column catalogue both DuckDB and MS
 # SQL Server expose (DuckDB lists its TEMP tables and registered views there
-# too). A backend without it, or a table it can't see, leaves us knowing
-# nothing -- which is where duckdt stood before this existed, so fall back to
-# excluding nothing rather than erroring.
-duckdt_column_types <- function(conn, table) {
+# too), which makes it the fallback when duckdt_describe()'s exact lookup
+# can't answer. A backend without it, or a table it can't see, leaves us
+# knowing nothing -- which is where duckdt stood before this existed, so fall
+# back to excluding nothing rather than erroring.
+duckdt_column_types <- function(conn, table, schema = NULL) {
   none <- data.frame(column = character(0), type = character(0))
   res <- tryCatch(
-    DBI::dbGetQuery(conn, paste0(
+    duckdt_get_query(conn, paste0(
       "SELECT column_name AS \"column\", data_type AS \"type\"",
       " FROM information_schema.columns WHERE table_name = ",
       DBI::dbQuoteString(conn, table),
+      if (!is.null(schema)) paste0(" AND table_schema = ", DBI::dbQuoteString(conn, schema)),
       " ORDER BY ordinal_position"
     )),
     error = function(e) none
   )
-  if (!is.data.frame(res) || !nrow(res)) none else res
+  if (!is.data.frame(res) || !nrow(res) || ncol(res) < 2) return(none)
+  # Rename by position: drivers may hand catalogue names back in upper case.
+  data.frame(column = as.character(res[[1]]), type = as.character(res[[2]]),
+    stringsAsFactors = FALSE)
 }
 
 # `data_type` is the bare type name in both catalogues -- "varbinary", not

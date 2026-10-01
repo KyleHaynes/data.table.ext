@@ -40,7 +40,7 @@ test_that("mssql FN_MAP renames functions that differ from duckdb", {
   )
 })
 
-test_that("median() becomes PERCENTILE_CONT for mssql, stays median() for duckdb", {
+test_that("median() is a window in a subquery for mssql, median() for duckdb", {
   con <- DBI::dbConnect(duckdb::duckdb())
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
   cols <- c("hp")
@@ -48,13 +48,27 @@ test_that("median() becomes PERCENTILE_CONT for mssql, stays median() for duckdb
   qhp <- as.character(DBI::dbQuoteIdentifier(con, "hp"))
 
   expect_equal(
-    translate_expr(quote(median(hp)), cols, env, con, "mssql"),
-    paste0("PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ", qhp, ")")
-  )
-  expect_equal(
     translate_expr(quote(median(hp)), cols, env, con, "duckdb"),
     paste0("median(", qhp, ")")
   )
+  # T-SQL's PERCENTILE_CONT is only a window function, so outside a `j` that
+  # can host the subquery there is nothing valid to emit.
+  expect_error(translate_expr(quote(median(hp)), cols, env, con, "mssql"), "only be used in `j`")
+
+  d <- as.dbdt(data.frame(g = c(1, 1, 2), hp = c(1, 3, 5)), conn = con, name = "med", copy = TRUE)
+  local_mocked_bindings(duckdt_dialect = function(conn) "mssql")
+  sql <- as.character(dbdt_sql(d, hp > 0, .(m = median(hp), n = .N), by = g))
+  # DuckDB quotes identifiers only where it has to; compare without quotes.
+  expect_identical(gsub('"', "", sql, fixed = TRUE), gsub('"', "", paste0(
+    'SELECT "g", MAX("duckdt_median_1") AS "m", count(*) AS "n" ',
+    'FROM (SELECT *, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY "hp") ',
+    'OVER (PARTITION BY "g") AS "duckdt_median_1" FROM "med" WHERE "hp" > 0) ',
+    'AS duckdt_w GROUP BY "g"'
+  ), fixed = TRUE))
+  # No `by`: the window spans every row the WHERE clause keeps.
+  sql <- as.character(dbdt_sql(d, , .(m = median(hp))))
+  expect_match(sql, "OVER () AS", fixed = TRUE)
+  expect_false(grepl("GROUP BY", sql))
 })
 
 test_that("%flike% uses CHARINDEX for mssql, contains() for duckdb", {

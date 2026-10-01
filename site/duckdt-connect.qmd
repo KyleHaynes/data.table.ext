@@ -151,7 +151,9 @@ d <- dbdt(con, "customers")
 d
 ```
 
-`nrow()`, `ncol()`, `dim()` and `names()` work on a handle and run tiny queries. Handles made this way are **read-only by default**, which the print flags: `:=` and `dbdt_merge()` refuse to run against them until you opt in with `dbdt(con, "customers", writable = TRUE)`. The point is to stop you changing a table you only meant to look at, for example after reconnecting to a file.
+A table outside the default schema is named with `schema =`, as in `dbdt(con, "orders", schema = "sales")` for `sales.orders`.
+
+`nrow()`, `ncol()`, `dim()` and `names()` work on a handle and run tiny queries. A handle looks its table's columns up the first time it needs them and keeps them, so if you change the columns some other way than `:=`, make a new handle. Handles made this way are **read-only by default**, which the print flags: `:=` and `dbdt_merge()` refuse to run against them until you opt in with `dbdt(con, "customers", writable = TRUE)`. The point is to stop you changing a table you only meant to look at, for example after reconnecting to a file.
 
 ### Reading a handle {#status}
 

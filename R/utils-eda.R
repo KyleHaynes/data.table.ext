@@ -360,3 +360,136 @@ key_dt <- function(dt, cols = NULL, max_size = 3L) {
     data.table::setorder(out, n_cols)
     out[]
 }
+
+#' Compare two versions of a table
+#'
+#' Matches the rows of `x` and `y` on the key columns `by` and lists every
+#' difference in one long table: rows only in `x`, rows only in `y`, and, for
+#' rows in both, each value that changed. Use it to reconcile an extract with
+#' its source, or to see what a pipeline run changed.
+#'
+#' Two missing values count as equal, and a missing value never equals a
+#' present one. Values are compared as they are, except that factors are
+#' compared by their labels, and numbers to within `tolerance`.
+#'
+#' @param x,y The two `data.table`s.
+#' @param by Character vector of key columns, present in both, that identify
+#'   a row. Each key must be unique within each table.
+#' @param cols Columns to compare. Default: every non-key column `x` and `y`
+#'   have in common.
+#' @param tolerance Numbers that differ by no more than this are treated as
+#'   equal. Default `0`, exact.
+#'
+#' @return A `data.table` with the `by` columns, then `status` (`"only in
+#'   x"`, `"only in y"` or `"changed"`), `column` (the column that changed),
+#'   and `x` and `y` (its two values, as text). It has zero rows when the
+#'   tables agree. Attributes: `"summary"`, a named count of each kind of
+#'   difference, and `"cols_only_x"`/`"cols_only_y"`, the columns only one
+#'   table has.
+#' @examples
+#' old <- data.table::data.table(id = 1:4, name = c("a", "b", "c", "d"), score = c(1, 2, 3, 4))
+#' new <- data.table::data.table(id = 2:5, name = c("b", "C", "d", "e"), score = c(2, 3, 4.5, 5))
+#' diffs <- compare_dt(old, new, by = "id")
+#' diffs
+#' attr(diffs, "summary")
+#' @export
+compare_dt <- function(x, y, by, cols = NULL, tolerance = 0) {
+    if (!data.table::is.data.table(x) || !data.table::is.data.table(y)) {
+        stop("'x' and 'y' must be data.tables.", call. = FALSE)
+    }
+    if (missing(by) || !is.character(by) || !length(by)) {
+        stop("'by' must name the key column(s) that identify a row.", call. = FALSE)
+    }
+    for (side in c("x", "y")) {
+        dt <- if (side == "x") x else y
+        missing_cols <- setdiff(by, names(dt))
+        if (length(missing_cols)) {
+            stop(sprintf("Key column(s) not found in '%s': %s", side, paste(missing_cols, collapse = ", ")), call. = FALSE)
+        }
+        if (anyDuplicated(dt, by = by)) {
+            stop(sprintf("'by' does not identify rows uniquely in '%s'; see dupe_dt(%s, by = ...).", side, side), call. = FALSE)
+        }
+    }
+    shared <- setdiff(intersect(names(x), names(y)), by)
+    if (is.null(cols)) {
+        cols <- shared
+    } else {
+        not_shared <- setdiff(cols, shared)
+        if (length(not_shared)) {
+            stop(sprintf("Column(s) to compare must be non-key columns of both tables: %s", paste(not_shared, collapse = ", ")), call. = FALSE)
+        }
+    }
+    tolerance <- suppressWarnings(as.numeric(tolerance[1L]))
+    if (is.na(tolerance) || tolerance < 0) {
+        stop("'tolerance' must be a non-negative number.", call. = FALSE)
+    }
+
+    xs <- x[, c(by, cols), with = FALSE]
+    ys <- y[, c(by, cols), with = FALSE]
+    data.table::set(xs, j = ".compare_in_x", value = TRUE)
+    data.table::set(ys, j = ".compare_in_y", value = TRUE)
+    m <- merge(xs, ys, by = by, all = TRUE, suffixes = c(".compare_x", ".compare_y"))
+    in_x <- !is.na(m[[".compare_in_x"]])
+    in_y <- !is.na(m[[".compare_in_y"]])
+    both <- in_x & in_y
+    key <- m[, by, with = FALSE]
+
+    absent <- function(rows, status) {
+        none <- rep(NA_character_, sum(rows))
+        data.table::data.table(key[rows], status = rep(status, sum(rows)), column = none,
+            x = none, y = none)
+    }
+    pieces <- list(absent(in_x & !in_y, "only in x"), absent(in_y & !in_x, "only in y"))
+    for (col in cols) {
+        vx <- m[[paste0(col, ".compare_x")]][both]
+        vy <- m[[paste0(col, ".compare_y")]][both]
+        differs <- .compare_differs(vx, vy, tolerance)
+        if (any(differs)) {
+            pieces[[length(pieces) + 1L]] <- data.table::data.table(
+                key[both][differs], status = "changed", column = col,
+                x = .compare_text(vx[differs]), y = .compare_text(vy[differs])
+            )
+        }
+    }
+    out <- data.table::rbindlist(pieces)
+    # Stable, so a row's changed columns stay in column order.
+    data.table::setorderv(out, by)
+
+    changed <- out$status == "changed"
+    data.table::setattr(out, "summary", c(
+        only_in_x = sum(out$status == "only in x"),
+        only_in_y = sum(out$status == "only in y"),
+        changed_rows = nrow(unique(out[changed, by, with = FALSE])),
+        changed_values = sum(changed)
+    ))
+    data.table::setattr(out, "cols_only_x", setdiff(names(x), names(y)))
+    data.table::setattr(out, "cols_only_y", setdiff(names(y), names(x)))
+    out[]
+}
+
+.compare_differs <- function(vx, vy, tolerance) {
+    na_x <- is.na(vx)
+    na_y <- is.na(vy)
+    if (is.list(vx) || is.list(vy)) {
+        return(!mapply(identical, vx, vy, USE.NAMES = FALSE))
+    }
+    if (is.factor(vx)) vx <- as.character(vx)
+    if (is.factor(vy)) vy <- as.character(vy)
+    equal <- if (is.numeric(vx) && is.numeric(vy) && !is.object(vx) && !is.object(vy)) {
+        abs(vx - vy) <= tolerance
+    } else if (identical(class(vx), class(vy))) {
+        vx == vy
+    } else {
+        as.character(vx) == as.character(vy)
+    }
+    ifelse(na_x | na_y, na_x != na_y, !equal)
+}
+
+.compare_text <- function(v) {
+    if (is.list(v)) {
+        return(vapply(v, function(e) paste(format(e), collapse = ", "), character(1L)))
+    }
+    out <- as.character(v)
+    out[is.na(v)] <- NA_character_
+    out
+}

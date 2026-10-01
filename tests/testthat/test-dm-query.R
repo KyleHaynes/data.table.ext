@@ -79,3 +79,11 @@ test_that("a reference with no known target column is drawn but not joined on", 
   expect_false(grepl("JOIN", sql))
   expect_equal(attr(sql, "unjoined"), "b")
 })
+
+test_that("dbdt_dm_query() caps rows with TOP for SQL Server", {
+  dm <- dbdt_data_model(list(orders = data.frame(id = 1L, total = 1)))
+  expect_match(dbdt_dm_query(dm, "orders", limit = 5), "\nLIMIT 5$")
+  sql <- dbdt_dm_query(dm, "orders", limit = 5, dialect = "mssql")
+  expect_true(startsWith(sql, "SELECT TOP (5)\n"))
+  expect_false(grepl("LIMIT", sql))
+})

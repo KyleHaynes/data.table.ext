@@ -144,11 +144,9 @@ ol[, .(order_id, line_no, qty, qty_doubled)][order(order_id, line_no)]
 
 A view (from a zero-copy `as.dbdt()`, or `dbdt_csv()` and `dbdt_parquet()`) can never be written to.
 
-::: {.callout-warning}
-## `:=` rebuilds the table
-To let DuckDB infer the new column's type, `:=` runs `CREATE OR REPLACE TABLE ... AS SELECT ...` over the whole table. That has consequences worth knowing before you use it on a table that matters:
+### How `:=` writes {#write-how}
 
-**Constraints are lost.** A table's primary key and `NOT NULL` constraints are not carried over:
+`:=` changes the table **in place**. A column that exists is set with `UPDATE` (with `i` as its `WHERE` clause, so only the matching rows are touched); a new column is added with `ALTER TABLE ... ADD` and then filled in; `col := NULL` drops a column, as in `data.table`. The table keeps its primary key, its constraints and its indexes:
 
 ```{r}
 #| output: false
@@ -163,26 +161,33 @@ constraints <- function(tbl) {
 ```
 
 ```{r}
-constraints("tagged")
-```
-
-```{r}
 tagged <- dbdt(con, "tagged", writable = TRUE)
 invisible(tagged[, y := x * 2L])
+invisible(tagged[id == 1, x := 11L])
 constraints("tagged")
+tagged[order(id)]
 ```
 
-**It cannot run on a table that another table references,** because the old table cannot be dropped while something depends on it:
+All the assignments in one `:=` call are translated before anything is written, and written in one transaction, so they land together or not at all. A later assignment in the call sees an earlier one's result, `` `:=`(kw = hp * 0.7457, kw2 = kw * 2) ``.
+
+Types follow `data.table`. With `i`, the column keeps its type and the new values are converted to it; assigning a whole column replaces it, type and all, so `n := n / 2` on an integer column gives a double one. A new column from an R value gets R's type: `:= 0.5` is a double, `:= "no"` is text with room for longer values later.
+
+Because nothing is dropped and recreated, `:=` also works on a table that other tables reference, such as `customers` here, which `orders` points at:
 
 ```{r}
-#| error: true
-dbdt(con, "customers", writable = TRUE)[, city_upper := toupper(city)]
+cust <- dbdt(con, "customers", writable = TRUE)
+invisible(cust[, city_upper := toupper(city)])
+cust[, .(customer_id, city, city_upper)][order(customer_id)]
 ```
 
-**Each assigned column is written in its own step.** If a later expression fails, the earlier columns stay written.
+`:= NULL` drops a column, though DuckDB won't drop one from a table others reference, like `customers`:
 
-There is no grouped `:=` (`by` together with a write). On SQL Server `:=` is emulated with a `SELECT ... INTO` rebuild and `sp_rename` inside a transaction, which is not a true atomic replace either: permissions and triggers on the original table are not preserved.
-:::
+```{r}
+invisible(tagged[, y := NULL])
+names(tagged)
+```
+
+There is no grouped `:=` (`by` together with a write). On SQL Server, see [what differs there](duckdt-mssql.qmd#dialect).
 
 ## Merging: `dbdt_merge()` {#merge}
 

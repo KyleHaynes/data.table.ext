@@ -1,6 +1,6 @@
 # duckdt_merge_exec_mssql()/duckdt_merge_stage() emit T-SQL (native MERGE,
 # SELECT ... INTO) with no DuckDB equivalent, so -- like
-# duckdt_rebuild_table_mssql() in test-mutate-mssql.R -- they're verified
+# `:=` in test-mutate-mssql.R -- they're verified
 # against a minimal recording fake DBI connection rather than a real SQL
 # Server.
 

@@ -44,6 +44,9 @@ duckdt_parquet <- function(path, conn = NULL, name = NULL, ...) {
 duckdt_from_reader <- function(path, conn, name, reader) {
   if (is.null(conn)) {
     conn <- DBI::dbConnect(duckdb::duckdb())
+    # Ours until the handle over it is returned: close it if setup fails.
+    owned <- TRUE
+    on.exit(if (owned) try(DBI::dbDisconnect(conn, shutdown = TRUE), silent = TRUE), add = TRUE)
     duckdt_hint_erd()
   }
   if (is.null(name)) name <- make.names(tools::file_path_sans_ext(basename(path[1])))
@@ -55,6 +58,8 @@ duckdt_from_reader <- function(path, conn, name, reader) {
     "CREATE OR REPLACE VIEW %s AS SELECT * FROM %s([%s])",
     DBI::dbQuoteIdentifier(conn, name), reader, qpaths
   )
-  DBI::dbExecute(conn, sql)
-  duckdt(conn, name, materialized = FALSE)
+  duckdt_execute(conn, sql)
+  out <- duckdt(conn, name, materialized = FALSE)
+  owned <- FALSE
+  out
 }

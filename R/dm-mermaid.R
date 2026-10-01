@@ -33,39 +33,40 @@ duckdt_dm_mermaid <- function(dm, view = c("all", "keys_only", "title_only"),
   tabs$entity <- duckdt_dm_entities(dm)[tabs$table]
 
   cols <- duckdt_dm_visible_columns(dm, view)
+  cols <- cols[cols$table %in% tabs$table, , drop = FALSE]
 
-  lines <- "erDiagram"
-  for (i in seq_len(nrow(tabs))) {
-    tab_cols <- cols[cols$table == tabs$table[i], , drop = FALSE]
-    lines <- c(lines, sprintf("    %s {", tabs$entity[i]))
-    for (j in seq_len(nrow(tab_cols))) {
-      keys <- c(
-        if (tab_cols$key[j] > 0) "PK",
-        if (!is.na(tab_cols$ref[j])) "FK"
-      )
-      lines <- c(lines, sprintf(
-        "        %s %s%s",
-        if (types) duckdt_mermaid_safe(tab_cols$type[j]) else "col",
-        duckdt_mermaid_safe(tab_cols$column[j]),
-        if (length(keys)) paste0(" ", paste(keys, collapse = ",")) else ""
-      ))
-    }
-    lines <- c(lines, "    }")
-  }
+  # Every line is built in one vectorised pass and then grouped by table:
+  # growing the output a line at a time is quadratic, which a schema with
+  # tens of thousands of columns makes very noticeable.
+  is_pk <- cols$key > 0
+  is_fk <- !is.na(cols$ref)
+  keys <- ifelse(is_pk & is_fk, " PK,FK", ifelse(is_pk, " PK", ifelse(is_fk, " FK", "")))
+  col_lines <- sprintf(
+    "        %s %s%s",
+    if (types) duckdt_mermaid_safe(cols$type) else rep("col", nrow(cols)),
+    duckdt_mermaid_safe(cols$column),
+    keys
+  )
+  by_table <- split(col_lines, factor(cols$table, levels = tabs$table))
+  blocks <- unlist(Map(
+    function(entity, body) c(sprintf("    %s {", entity), body, "    }"),
+    tabs$entity, by_table
+  ), use.names = FALSE)
 
   refs <- as.data.frame(dm$references)
   refs <- refs[refs$table %in% tabs$table & refs$ref %in% tabs$table, , drop = FALSE]
   entities <- stats::setNames(tabs$entity, tabs$table)
-  for (id in unique(refs$ref_id)) {
-    one <- refs[refs$ref_id == id, , drop = FALSE]
-    lines <- c(lines, sprintf(
-      '    %s ||--o{ %s : "%s"',
-      entities[[one$ref[1]]], entities[[one$table[1]]],
-      paste(one$column, collapse = ", ")
-    ))
-  }
+  first <- refs[!duplicated(refs$ref_id), , drop = FALSE]
+  labels <- vapply(
+    split(refs$column, factor(refs$ref_id, levels = first$ref_id)),
+    paste, character(1), collapse = ", "
+  )
+  ref_lines <- sprintf(
+    '    %s ||--o{ %s : "%s"',
+    entities[first$ref], entities[first$table], labels
+  )
 
-  paste(lines, collapse = "\n")
+  paste(c("erDiagram", blocks, if (nrow(first)) ref_lines), collapse = "\n")
 }
 
 # Mermaid entity names must be plain identifiers; keep the schema in them so

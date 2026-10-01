@@ -20,24 +20,23 @@ In the meantime [`dbdt_temp()`](duckdt-join-write.qmd#temp) covers the case that
 
 ### Database tables have no row order {#order}
 
-DuckDB tables are unordered without an explicit `ORDER BY`. So `order()` inside `i` and row positions such as `d[1:5]` are not supported, `tail()` reflects DuckDB's current scan order, and no query has a guaranteed row order. Sort the returned `data.table`. [Details](duckdt-query.qmd#ordering).
+DuckDB tables are unordered without an explicit `ORDER BY`. `d[order(x)]` sorts in the database, but row positions such as `d[1:5]` are not supported, `tail()` reflects DuckDB's current scan order, and any other query has no guaranteed row order. [Details](duckdt-query.qmd#ordering).
 
 ## Not supported yet
 
 - Lazy, chained query building (above).
-- Row-position indexing and `order()` in `i`.
+- Row-position indexing in `i`, and `order()` together with `by`.
 - Grouped `:=`, that is `by =` together with a write.
 - `dbdt_sample(x, n, replace = TRUE)`. DuckDB's sampling clause has no replacement option.
-- `na.rm`, and R functions with no DuckDB equivalent such as `ifelse()` and `as.Date()`, inside a query. [Details](duckdt-query.qmd#functions).
+- R functions that are neither [translated](duckdt-query.qmd#functions) nor a DuckDB function of the same name, such as `format()` or your own functions.
 - A bare function call in `j`: write `.(m = mean(x))`, not `mean(x)`.
 - Zero-copy `as.dbdt()`, `dbdt_csv()`, `dbdt_parquet()` and list-columns against SQL Server. [Details](duckdt-mssql.qmd).
 
 ## Writes {#writes}
 
-- **`:=` rebuilds the table.** Primary keys and `NOT NULL` constraints are dropped, and it cannot run on a table that another table references. [Details](duckdt-join-write.qmd#write).
-- **Multi-column `:=` is not atomic.** Each assigned column is written in its own step, so if a later expression fails, the earlier columns stay written.
+- **DuckDB won't drop a column from a referenced table.** `:=` can update a table that other tables reference, and add columns to it, but `col := NULL` there fails while the reference stands.
+- **On SQL Server, a column keeps its type.** Assigning a whole column updates it in place rather than replacing it, so its values are converted to its existing type. [Details](duckdt-mssql.qmd#dialect).
 - **Do not re-wrap a temporary table.** `dbdt(con, "<temp table name>", writable = TRUE)` loses the table's temporary status, so a `:=` through it can create a permanent table of the same name while reads keep returning the temporary one. Keep using the handle `dbdt_temp()` gave you.
-- **Staging tables use reserved names.** `dbdt_merge()` stages its subset in a temporary table called `<table>__duckdt_merge_tmp`, and on SQL Server `:=` rebuilds through `<table>__duckdt_tmp`. Each is replaced, and dropped afterwards, without a check, so a table of your own with such a name would be lost: a temporary one on DuckDB, an ordinary one on SQL Server. Do not name your own tables that way.
 - **`:=` prints the handle.** It returns the handle, so the console prints it after each assignment.
 
 ## Missing values {#na-keys}
@@ -59,7 +58,7 @@ merge(data.table(k = c(1L, NA), a = c("x", "y")), b, by = "k")
 
 Consequently a `dbdt_merge()` upsert whose key is missing inserts instead of updating. Drop or fill missing keys first.
 
-- **`na.rm` is not translated.** SQL aggregates already skip `NULL`, so leave it out. [Details](duckdt-query.qmd#na).
+- **Aggregates always skip missing values.** SQL aggregates skip `NULL`, so `mean(x)` in a query is R's `mean(x, na.rm = TRUE)`; an `na.rm` argument is accepted and dropped. `uniqueN()` likewise doesn't count `NA` as a value. [Details](duckdt-query.qmd#na).
 
 ## Display {#display-limits}
 
@@ -81,7 +80,7 @@ With the print mask on, a table of more than 11 rows shows its first and last fi
 
 ## SQL Server {#sql-server}
 
-SQL Server support is tested against emitted SQL and not a live server, and a few translations are known to be shaky: `median()` needs an `OVER` clause that is not yet generated, and `REGEXP_LIKE()` needs SQL Server 2025. [Details](duckdt-mssql.qmd).
+SQL Server support is tested against emitted SQL and not a live server. A regular expression in `%like%` or `grepl()` needs `REGEXP_LIKE()`, so SQL Server 2025; plain text, optionally anchored with `^` or `$`, works on any version as `LIKE`. `median()` works in `j` only. [Details](duckdt-mssql.qmd).
 
 ```{r}
 #| include: false

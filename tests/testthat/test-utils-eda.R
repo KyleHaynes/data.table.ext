@@ -191,3 +191,36 @@ test_that("key_dt errors on missing columns", {
     d <- data.table(x = 1)
     expect_error(key_dt(d, cols = "zzz"), "not found")
 })
+
+test_that("compare_dt() lists rows only on one side and changed values", {
+  old <- data.table::data.table(id = 1:4, name = c("a", "b", "c", "d"), score = c(1, 2, 3, 4))
+  new <- data.table::data.table(id = 2:5, name = c("b", "C", "d", "e"), score = c(2, 3, 4.5, 5))
+  out <- compare_dt(old, new, by = "id")
+  expect_identical(names(out), c("id", "status", "column", "x", "y"))
+  expect_identical(out$id, c(1L, 3L, 4L, 5L))
+  expect_identical(out$status, c("only in x", "changed", "changed", "only in y"))
+  expect_identical(out$column, c(NA, "name", "score", NA))
+  expect_identical(out$x, c(NA, "c", "4", NA))
+  expect_identical(out$y, c(NA, "C", "4.5", NA))
+  expect_identical(attr(out, "summary"),
+    c(only_in_x = 1L, only_in_y = 1L, changed_rows = 2L, changed_values = 2L))
+})
+
+test_that("compare_dt() treats NA pairs as equal and honours tolerance and cols", {
+  x <- data.table::data.table(k = c("a", "b", "c"), v = c(1, NA, 3), w = factor(c("p", "q", "r")), only = 1)
+  y <- data.table::data.table(k = c("a", "b", "c"), v = c(1.001, NA, NA), w = c("p", "q", "R"))
+  out <- compare_dt(x, y, by = "k")
+  expect_identical(out$column, c("v", "v", "w"))
+  expect_identical(out$y, c("1.001", NA, "R"))
+  expect_identical(attr(out, "cols_only_x"), "only")
+  expect_identical(compare_dt(x, y, by = "k", tolerance = 0.01, cols = "v")$k, "c")
+  expect_equal(nrow(compare_dt(x, x, by = "k")), 0L)
+})
+
+test_that("compare_dt() validates its inputs", {
+  x <- data.table::data.table(k = c(1, 1), v = 1:2)
+  expect_error(compare_dt(x, x, by = "k"), "uniquely in 'x'")
+  expect_error(compare_dt(x, data.frame(k = 1), by = "k"), "must be data.tables")
+  expect_error(compare_dt(x, x, by = "nope"), "not found")
+  expect_error(compare_dt(x[1], x[1], by = "k", cols = "k"), "non-key")
+})

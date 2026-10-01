@@ -144,3 +144,11 @@ dbdt_temp <- duckdt_temp
 #' @rdname is_duckdt_data_model
 #' @export
 is_dbdt_data_model <- is_duckdt_data_model
+
+#' @rdname duckdt_profile
+#' @export
+dbdt_profile <- duckdt_profile
+
+#' @rdname duckdt_sql
+#' @export
+dbdt_sql <- duckdt_sql
