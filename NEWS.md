@@ -17,6 +17,13 @@
   `dbdt_dm_mermaid()` from 10 s to 0.1 s, with identical output.
 * `print()` on a SQL Server table shows the row count from partition
   metadata, marked `~`, instead of `?`.
+* On SQL Server, `nrow()` and `dim()` read the same metadata instead of
+  running `count(*)`, and are `NA` for a view; `d[, .N]` counts exactly.
+  Editors call `dim()` on every workspace object after each command (VS
+  Code's R session watcher does), so a handle on a large table made every
+  line, even `print()` of an unrelated data.table, wait for a full scan.
+* `row_counts = TRUE` / `include_row_counts = TRUE` no longer count SQL
+  Server views, each of which ran the view's query on the server.
 * `options(duckdt.trace = TRUE)` prints every statement sent and how long it
   took. New `dbdt_sql()` returns the SQL `d[i, j, by]` would run.
 * `dbdt(con, table, schema = "sales")` reaches tables outside the default

@@ -40,10 +40,12 @@ these tables. Matched against the bare table name or \code{"schema.name"}.}
 \item{infer_references}{Also guess references from column naming
 conventions, via \code{\link[=dbdt_dm_infer_references]{dbdt_dm_infer_references()}}. Default \code{FALSE}.}
 
-\item{row_counts}{Run a \verb{SELECT count(*)} per table and record it on the
-model. Default \code{FALSE}, since this can be slow on a large or remote
-database; a failure on any single table records \code{NA} rather than
-failing the whole call.}
+\item{row_counts}{Record each table's row count on the model. Default
+\code{FALSE}. On DuckDB this runs a \verb{SELECT count(*)} per table and view; a
+failure on any single one records \code{NA} rather than failing the whole
+call. On SQL Server every table's count comes from partition metadata in
+one query, and views, whose count would mean running each view's query
+on the server, are left \code{NA}.}
 }
 \value{
 An object of class \code{"duckdt_data_model"}: a list of three

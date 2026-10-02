@@ -22,10 +22,12 @@
 #'   these tables. Matched against the bare table name or `"schema.name"`.
 #' @param infer_references Also guess references from column naming
 #'   conventions, via [dbdt_dm_infer_references()]. Default `FALSE`.
-#' @param row_counts Run a `SELECT count(*)` per table and record it on the
-#'   model. Default `FALSE`, since this can be slow on a large or remote
-#'   database; a failure on any single table records `NA` rather than
-#'   failing the whole call.
+#' @param row_counts Record each table's row count on the model. Default
+#'   `FALSE`. On DuckDB this runs a `SELECT count(*)` per table and view; a
+#'   failure on any single one records `NA` rather than failing the whole
+#'   call. On SQL Server every table's count comes from partition metadata in
+#'   one query, and views, whose count would mean running each view's query
+#'   on the server, are left `NA`.
 #' @param ... Passed on to methods.
 #'
 #' @return An object of class `"duckdt_data_model"`: a list of three
@@ -92,12 +94,14 @@ duckdt_data_model.default <- function(x, tables = NULL, infer_references = FALSE
   }
 
   tbl$n_rows <- NA_real_
-  if (isTRUE(row_counts)) {
+  if (isTRUE(row_counts) && duckdt_dialect(conn) == "mssql") {
     # SQL Server keeps every table's row count in its partition metadata:
     # one catalogue query instead of a full count(*) of each table. Views
-    # have none, and are counted below like everything else.
-    if (duckdt_dialect(conn) == "mssql") tbl$n_rows <- duckdt_mssql_row_counts(conn, tbl)
-    for (i in which(is.na(tbl$n_rows))) {
+    # have none and stay NA: counting one runs its query on the server,
+    # which for a view over a large table can take minutes, once per view.
+    tbl$n_rows <- duckdt_mssql_row_counts(conn, tbl)
+  } else if (isTRUE(row_counts)) {
+    for (i in seq_len(nrow(tbl))) {
       qname <- paste0(
         DBI::dbQuoteIdentifier(conn, tbl$schema[i]), ".",
         DBI::dbQuoteIdentifier(conn, tbl$name[i])

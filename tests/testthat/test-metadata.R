@@ -112,6 +112,37 @@ test_that("SQL Server print() shows the catalogue's row count, marked approximat
   expect_output(print(d), "[~1,234,567 x 1]", fixed = TRUE)
 })
 
+test_that("SQL Server dim() reads partition metadata instead of counting", {
+  # VS Code's R session watcher calls dim() on every workspace object after
+  # each command, so a count(*) here scanned the table every time.
+  con <- DBI::dbConnect(duckdb::duckdb())
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  d <- as.dbdt(data.frame(id = 1:3, x = 4:6), conn = con, name = "big", copy = TRUE)
+  local_mocked_bindings(duckdt_dialect = function(conn) "mssql")
+  query <- DBI::dbGetQuery
+  partitions <- data.frame(n = 1234567)
+  counted <- 0L
+  local_mocked_bindings(dbGetQuery = function(conn, statement, ...) {
+    if (grepl("sys.partitions", statement, fixed = TRUE)) return(partitions)
+    if (grepl("count(*)", statement, fixed = TRUE)) counted <<- counted + 1L
+    if (grepl("OFFSET", statement, fixed = TRUE)) return(data.frame(id = 3L, x = 6L))
+    query(conn, statement, ...)
+  }, .package = "DBI")
+  expect_equal(dim(d), c(1234567, 2))
+  expect_equal(nrow(d), 1234567)
+  expect_equal(ncol(d), 2L)
+  expect_identical(counted, 0L)
+
+  # A view has no partition metadata: NA rather than a scan.
+  partitions <- data.frame(n = NA_real_)
+  expect_equal(dim(d), c(NA, 2))
+  expect_identical(counted, 0L)
+
+  # tail() needs the exact count to compute its offset, so it still counts.
+  tail(d, 1)
+  expect_identical(counted, 1L)
+})
+
 test_that("SQL Server data model reads row counts from partition metadata", {
   con <- DBI::dbConnect(duckdb::duckdb())
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
@@ -129,9 +160,10 @@ test_that("SQL Server data model reads row counts from partition metadata", {
   }, .package = "DBI")
   dm <- dbdt_data_model(con, row_counts = TRUE)
   expect_equal(dm$tables$n_rows[dm$tables$name == "a"], 42)
-  # Only the view, which has no partitions, is counted.
-  expect_length(counted, 1L)
-  expect_match(counted, '[."]v"?$')
+  # The view has no partitions, and counting it would run its query on the
+  # server, so it is left uncounted.
+  expect_true(is.na(dm$tables$n_rows[dm$tables$name == "v"]))
+  expect_length(counted, 0L)
 })
 
 test_that("dbdt_temp() on SQL Server won't replace a table it didn't make", {

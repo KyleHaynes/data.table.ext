@@ -46,7 +46,7 @@ Relationships are only reported when the database **declares** them as constrain
 
 ```r
 dbdt_erd(con)                             # opens the explorer in your browser
-dbdt_erd(con, include_row_counts = TRUE)  # add a count(*) per table (can be slow)
+dbdt_erd(con, include_row_counts = TRUE)  # add each table's row count
 dbdt_erd(con, tables = c("orders", "customers"), view = "keys_only")
 ```
 
@@ -71,7 +71,7 @@ It needs no packages beyond `data.table.ext`. The diagram itself is drawn by [Me
 |:---|:---|:---|
 | `x` | | A `DBI` connection, a `"duckdt"` handle, or a data model (see [below](#data-model)) so you can filter or annotate it first |
 | `tables` | all | Only model these tables |
-| `include_row_counts` | `FALSE` | A `count(*)` per table, shown beside it. Can be slow on a large or remote database. |
+| `include_row_counts` | `FALSE` | Each table's row count, shown beside it: a `count(*)` per table and view on DuckDB; on SQL Server, partition metadata in one query, with views left uncounted. |
 | `open` | `TRUE` | Open the page with `browseURL()` |
 | `infer_references` | `FALSE` | Guess undeclared foreign keys from column names ([details](#references)) |
 | `select` | all if there are 12 tables or fewer, otherwise none | Tables to start ticked |

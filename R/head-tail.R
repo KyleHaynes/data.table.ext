@@ -44,7 +44,7 @@ head.duckdt <- function(x, n = 6L, ...) {
   # LIMIT/TOP already stop at the available rows. Counting first can force
   # a full scan of a file-backed view just to preview a handful of rows.
   if (n < 0 || is.infinite(n)) {
-    nr <- dim(x)[1]
+    nr <- duckdt_count_rows(x)
     n <- if (n < 0) max(nr + n, 0) else nr
   }
   dialect <- duckdt_dialect(x$conn)
@@ -57,7 +57,7 @@ head.duckdt <- function(x, n = 6L, ...) {
 #' @rdname duckdt-head-tail
 #' @exportS3Method utils::tail
 tail.duckdt <- function(x, n = 6L, ...) {
-  nr <- dim(x)[1]
+  nr <- duckdt_count_rows(x)
   n <- if (n < 0) max(nr + n, 0) else min(n, nr)
   off <- max(nr - n, 0)
   dialect <- duckdt_dialect(x$conn)

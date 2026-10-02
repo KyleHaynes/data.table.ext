@@ -40,8 +40,10 @@ search path on DuckDB.}
 Server to avoid scanning the table just to preview it. Uncounted, a SQL
 Server table shows the row total from its partition metadata, marked
 \code{~} (free to read, and exact unless rows are being written at that
-moment); a view, which has none, shows \verb{?}. \code{nrow()} and \code{dim()} still
-count exactly.}
+moment); a view, which has none, shows \verb{?}. \code{nrow()} and \code{dim()} on SQL
+Server report the same metadata total (\code{NA} for a view) rather than
+scanning, because editors call \code{dim()} on every object in the workspace
+after each command. \code{d[, .N]} counts exactly.}
 }
 \value{
 An object of class \code{"duckdt"}.

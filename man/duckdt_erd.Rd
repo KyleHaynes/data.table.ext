@@ -37,10 +37,11 @@ annotate it first).}
 \item{tables}{Optionally, a character vector of tables to model. Others
 are left out entirely.}
 
-\item{include_row_counts}{Run a \verb{SELECT count(*)} per table and show it
-next to each table. Default \code{FALSE}, since this can be slow on a large
-or remote database; a failure on any single table shows as no count
-rather than failing the whole call.}
+\item{include_row_counts}{Show each table's row count next to it.
+Default \code{FALSE}. On DuckDB this runs a \verb{SELECT count(*)} per table and
+view; a failure on any single one shows as no count rather than failing
+the whole call. On SQL Server the counts come from partition metadata
+in one query, and views show no count (see \code{\link[=dbdt_data_model]{dbdt_data_model()}}).}
 
 \item{open}{Open the generated page with \code{\link[utils:browseURL]{utils::browseURL()}}. Default
 \code{TRUE}.}

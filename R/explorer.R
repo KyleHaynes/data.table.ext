@@ -17,7 +17,9 @@
 #' @param tables Optionally, a character vector of tables to model.
 #' @param infer_references Guess undeclared foreign keys from column naming
 #'   conventions, via [dbdt_dm_infer_references()].
-#' @param row_counts Show each table's row count (a `count(*)` per table).
+#' @param row_counts Show each table's row count: a `count(*)` per table on
+#'   DuckDB, partition metadata on SQL Server, where views show no count (see
+#'   [dbdt_data_model()]).
 #' @param ... Passed to [shiny::shinyApp()].
 #'
 #' @return A Shiny app object. Printed at the console (or returned from a

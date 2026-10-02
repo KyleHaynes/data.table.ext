@@ -229,22 +229,29 @@ duckdt_approx_rows <- function(x) {
   if (length(n) == 1L && !is.na(n)) as.numeric(n) else NA_real_
 }
 
+# An exact row count, which on SQL Server scans the table (or runs the
+# view's query). Only for callers that can't do without the exact number.
+duckdt_count_rows <- function(x) {
+  duckdt_get_query(x$conn, paste0("SELECT count(*) AS n FROM ", duckdt_qtbl(x)))$n
+}
+
 #' @param x A `"duckdt"` database handle.
 #' @param n Number of preview rows to print.
 #' @param count Count all rows when printing? Defaults to `FALSE` on SQL
 #'   Server to avoid scanning the table just to preview it. Uncounted, a SQL
 #'   Server table shows the row total from its partition metadata, marked
 #'   `~` (free to read, and exact unless rows are being written at that
-#'   moment); a view, which has none, shows `?`. `nrow()` and `dim()` still
-#'   count exactly.
+#'   moment); a view, which has none, shows `?`. `nrow()` and `dim()` on SQL
+#'   Server report the same metadata total (`NA` for a view) rather than
+#'   scanning, because editors call `dim()` on every object in the workspace
+#'   after each command. `d[, .N]` counts exactly.
 #' @param ... Unused.
 #' @rdname duckdt
 #' @export
 print.duckdt <- function(x, n = 6L, ..., count = duckdt_dialect(x$conn) != "mssql") {
   cols <- duckdt_columns(x)
   nr <- if (isTRUE(count)) {
-    format(duckdt_get_query(x$conn, paste0("SELECT count(*) AS n FROM ", duckdt_qtbl(x)))$n,
-      big.mark = ",")
+    format(duckdt_count_rows(x), big.mark = ",")
   } else {
     approx <- duckdt_approx_rows(x)
     if (is.na(approx)) "?" else paste0("~", format(approx, big.mark = ",", scientific = FALSE))
@@ -288,7 +295,12 @@ print.duckdt <- function(x, n = 6L, ..., count = duckdt_dialect(x$conn) != "mssq
 #' @export
 dim.duckdt <- function(x) {
   cols <- duckdt_columns(x)
-  nr <- duckdt_get_query(x$conn, paste0("SELECT count(*) AS n FROM ", duckdt_qtbl(x)))$n
+  # Editors call dim() on every object in the workspace after each command
+  # (VS Code's R session watcher does), so on SQL Server, where a count(*)
+  # of a large table takes seconds to minutes, it reads partition metadata
+  # instead -- as print() does -- and a view, which has none, is NA, as with
+  # dbplyr's lazy tables.
+  nr <- if (duckdt_dialect(x$conn) == "mssql") duckdt_approx_rows(x) else duckdt_count_rows(x)
   c(nr, length(cols))
 }
 
@@ -296,7 +308,7 @@ dim.duckdt <- function(x) {
 nrow.duckdt <- function(x) dim(x)[1]
 
 #' @exportS3Method base::ncol
-ncol.duckdt <- function(x) dim(x)[2]
+ncol.duckdt <- function(x) length(duckdt_columns(x))
 
 #' @export
 names.duckdt <- function(x) duckdt_columns(x)

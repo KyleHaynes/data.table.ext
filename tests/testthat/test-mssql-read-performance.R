@@ -81,7 +81,13 @@ test_that("SQL Server previews avoid counting rows unless requested", {
   expect_false(any(grepl("count(*)", statements, fixed = TRUE)))
   expect_output(print(d, count = TRUE), "[3 x 1]", fixed = TRUE)
   expect_true(any(grepl("count(*)", statements, fixed = TRUE)))
-  expect_equal(nrow(d), 3)
+
+  # nrow() reads the same metadata as print(), which this stand-in catalogue
+  # doesn't have, so NA without a scan; d[, .N] is the exact count.
+  counts <- sum(grepl("count(*)", statements, fixed = TRUE))
+  expect_true(is.na(nrow(d)))
+  expect_identical(sum(grepl("count(*)", statements, fixed = TRUE)), counts)
+  expect_equal(d[, .N]$N, 3)
 })
 
 test_that("sampling validates row counts and handles zero and empty results", {

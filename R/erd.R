@@ -25,10 +25,11 @@
 #'   annotate it first).
 #' @param tables Optionally, a character vector of tables to model. Others
 #'   are left out entirely.
-#' @param include_row_counts Run a `SELECT count(*)` per table and show it
-#'   next to each table. Default `FALSE`, since this can be slow on a large
-#'   or remote database; a failure on any single table shows as no count
-#'   rather than failing the whole call.
+#' @param include_row_counts Show each table's row count next to it.
+#'   Default `FALSE`. On DuckDB this runs a `SELECT count(*)` per table and
+#'   view; a failure on any single one shows as no count rather than failing
+#'   the whole call. On SQL Server the counts come from partition metadata
+#'   in one query, and views show no count (see [dbdt_data_model()]).
 #' @param open Open the generated page with [utils::browseURL()]. Default
 #'   `TRUE`.
 #' @param infer_references Guess undeclared foreign keys from column naming

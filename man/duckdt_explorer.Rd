@@ -31,7 +31,9 @@ browses and builds queries but cannot run them.}
 \item{infer_references}{Guess undeclared foreign keys from column naming
 conventions, via \code{\link[=dbdt_dm_infer_references]{dbdt_dm_infer_references()}}.}
 
-\item{row_counts}{Show each table's row count (a \verb{count(*)} per table).}
+\item{row_counts}{Show each table's row count: a \verb{count(*)} per table on
+DuckDB, partition metadata on SQL Server, where views show no count (see
+\code{\link[=dbdt_data_model]{dbdt_data_model()}}).}
 
 \item{...}{Passed to \code{\link[shiny:shinyApp]{shiny::shinyApp()}}.}
 }
