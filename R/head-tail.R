@@ -8,6 +8,12 @@
 #' `tail()` reflects DuckDB's current scan order rather than a guaranteed
 #' original row order — see the package README for details.
 #'
+#' On SQL Server, `tail()` of a table with a clustered index returns the last
+#' `n` rows by that index's key, read from the end of the index, so it costs
+#' about what `head()` does. Without one (a heap, a clustered columnstore
+#' index or a view), it counts the rows and then reads past all but the last
+#' `n`, which on a large table means two full scans.
+#'
 #' @param x A `"duckdt"` object.
 #' @param n Number of rows. Negative values count from the opposite end.
 #' @param ... Unused.
@@ -57,12 +63,56 @@ head.duckdt <- function(x, n = 6L, ...) {
 #' @rdname duckdt-head-tail
 #' @exportS3Method utils::tail
 tail.duckdt <- function(x, n = 6L, ...) {
+  dialect <- duckdt_dialect(x$conn)
+  # On SQL Server the OFFSET below reads past every row before the last n,
+  # after a count(*) that scans the table too: two full passes over a large
+  # table to show six rows. A table with a clustered index can instead be
+  # read backwards from the end of it, which takes the last n rows directly.
+  if (dialect == "mssql" && n >= 0 && is.finite(n) && isTRUE(x$materialized)) {
+    order <- duckdt_mssql_reverse_order(x)
+    if (!is.null(order)) {
+      sql <- paste0(duckdt_limit_sql(duckdt_qtbl(x), n, dialect, duckdt_star(x)), " ORDER BY ", order)
+      out <- data.table::setDT(duckdt_get_query(x$conn, sql))
+      return(out[rev(seq_len(nrow(out)))])
+    }
+  }
   nr <- duckdt_count_rows(x)
   n <- if (n < 0) max(nr + n, 0) else min(n, nr)
   off <- max(nr - n, 0)
-  dialect <- duckdt_dialect(x$conn)
   sql <- duckdt_tail_sql(duckdt_qtbl(x), n, off, dialect, duckdt_star(x))
   data.table::setDT(duckdt_get_query(x$conn, sql))[]
+}
+
+# The ORDER BY that walks a SQL Server table's clustered rowstore index from
+# its end: each key column in the opposite direction to the index's own.
+# NULL for a heap, a clustered columnstore index (which has no key order), or
+# if the catalogue can't be read. Kept on the handle after the first lookup,
+# like the column types.
+duckdt_mssql_reverse_order <- function(x) {
+  cache <- x$meta
+  if (is.environment(cache) && !is.null(cache$reverse_order)) {
+    return(if (nzchar(cache$reverse_order)) cache$reverse_order)
+  }
+  sys <- duckdt_mssql_sys(x$tbl)
+  res <- tryCatch(duckdt_get_query(x$conn, paste0(
+    "SELECT c.name AS column_name, ic.is_descending_key AS descending ",
+    "FROM ", sys, "indexes i ",
+    "JOIN ", sys, "index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id ",
+    "JOIN ", sys, "columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id ",
+    "WHERE i.object_id = ", duckdt_mssql_object_id(x$conn, x$tbl, x$schema),
+    " AND i.type = 1 AND ic.key_ordinal > 0 ORDER BY ic.key_ordinal"
+  )), error = function(e) NULL)
+  order <- if (is.data.frame(res) && nrow(res) && ncol(res) >= 2) {
+    paste(
+      DBI::dbQuoteIdentifier(x$conn, as.character(res[[1]])),
+      ifelse(as.logical(res[[2]]) %in% TRUE, "ASC", "DESC"),
+      collapse = ", "
+    )
+  } else {
+    ""
+  }
+  if (is.environment(cache)) cache$reverse_order <- order
+  if (nzchar(order)) order
 }
 
 # OFFSET/FETCH requires an ORDER BY in T-SQL; ordering by a constant subquery

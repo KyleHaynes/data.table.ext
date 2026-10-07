@@ -90,6 +90,57 @@ test_that("SQL Server previews avoid counting rows unless requested", {
   expect_equal(d[, .N]$N, 3)
 })
 
+test_that("SQL Server tail() reads a clustered index backwards instead of counting", {
+  # The count(*) and OFFSET each scanned the table: on ~300M rows, tail()
+  # took minutes where head() took milliseconds.
+  d <- duckdt_handle(ansi_conn(), "big")
+  local_mocked_bindings(duckdt_dialect = function(conn) "mssql")
+  # Upper-case names, as some SQL Server drivers return them.
+  key <- data.frame(COLUMN_NAME = c("grp", "id"), DESCENDING = c(0L, 1L))
+  lookups <- 0L
+  statements <- character()
+  local_mocked_bindings(dbGetQuery = function(conn, statement, ...) {
+    if (grepl("sys.indexes", statement, fixed = TRUE)) {
+      lookups <<- lookups + 1L
+      return(key)
+    }
+    if (grepl("sys.columns", statement, fixed = TRUE)) {
+      return(data.frame(column_name = c("grp", "id"), data_type = "int"))
+    }
+    statements <<- c(statements, statement)
+    if (grepl("count(*)", statement, fixed = TRUE)) return(data.frame(n = 3))
+    if (grepl("TOP (0)", statement, fixed = TRUE)) return(data.frame(grp = integer(), id = integer()))
+    data.frame(grp = c(1L, 1L), id = c(3L, 2L))
+  }, .package = "DBI")
+
+  out <- tail(d, 2)
+  expect_identical(statements, 'SELECT TOP (2) * FROM "big" ORDER BY "grp" DESC, "id" ASC')
+  # Back in index order, the way head() returns rows.
+  expect_identical(out$id, c(2L, 3L))
+  expect_true(withVisible(tail(d, 2))$visible)
+  expect_identical(lookups, 1L)
+  expect_equal(nrow(tail(d, 0)), 0L)
+
+  # A negative n is most of the table anyway, so it still counts.
+  statements <- character()
+  tail(d, -1)
+  expect_match(statements[1], "count(*)", fixed = TRUE)
+
+  # A heap, or a clustered columnstore index, has no key to read backwards.
+  d <- duckdt_handle(ansi_conn(), "heap")
+  key <- data.frame(COLUMN_NAME = character(), DESCENDING = integer())
+  statements <- character()
+  tail(d, 2)
+  expect_match(statements[1], "count(*)", fixed = TRUE)
+  expect_match(statements[2], "OFFSET 1 ROWS FETCH NEXT 2 ROWS ONLY", fixed = TRUE)
+
+  # A view is never looked up.
+  lookups <- 0L
+  d <- duckdt_handle(ansi_conn(), "v", materialized = FALSE)
+  tail(d, 2)
+  expect_identical(lookups, 0L)
+})
+
 test_that("sampling validates row counts and handles zero and empty results", {
   con <- DBI::dbConnect(duckdb::duckdb())
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE))

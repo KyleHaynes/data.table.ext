@@ -29,6 +29,12 @@ as a \code{data.table}. Negative \code{n} mirrors \code{\link[utils:head]{utils:
 Because DuckDB tables are unordered without an explicit \verb{ORDER BY},
 \code{tail()} reflects DuckDB's current scan order rather than a guaranteed
 original row order — see the package README for details.
+
+On SQL Server, \code{tail()} of a table with a clustered index returns the last
+\code{n} rows by that index's key, read from the end of the index, so it costs
+about what \code{head()} does. Without one (a heap, a clustered columnstore
+index or a view), it counts the rows and then reads past all but the last
+\code{n}, which on a large table means two full scans.
 }
 \section{Binary columns}{
 

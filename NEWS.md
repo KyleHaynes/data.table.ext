@@ -22,6 +22,11 @@
   Editors call `dim()` on every workspace object after each command (VS
   Code's R session watcher does), so a handle on a large table made every
   line, even `print()` of an unrelated data.table, wait for a full scan.
+* `tail()` on a SQL Server table with a clustered index reads the index
+  backwards and takes the last rows by its key, instead of a `count(*)`
+  followed by an `OFFSET` past every other row. Those were two full scans,
+  so on a ~300M-row table `tail()` took minutes where `head()` took
+  milliseconds. Heaps, clustered columnstore indexes and views still count.
 * `row_counts = TRUE` / `include_row_counts = TRUE` no longer count SQL
   Server views, each of which ran the view's query on the server.
 * `options(duckdt.trace = TRUE)` prints every statement sent and how long it

@@ -27,6 +27,7 @@ On a database with thousands of tables, the catalogue can be slower to ask than 
 - **A handle looks its columns up once.** `dbdt(con, "t")` finds the table with a single `OBJECT_ID()` lookup in `sys.objects`. The first query reads its columns and types from `sys.columns`, and the handle keeps them, so later queries send only the query itself. `:=` refreshes them; if the table's columns change some other way, make a new handle. ODBC's own catalogue calls (`dbExistsTable()`, `dbListFields()`) search every schema by pattern, and `INFORMATION_SCHEMA` does per-column work, so neither is used.
 - **`print()` doesn't count rows.** It shows the row total from the table's partition metadata, marked `~`, which costs nothing to read and is exact unless rows are being written at that moment. A view has no such metadata and shows `?`. `print(d, count = TRUE)` and `d[, .N]` count exactly, with a scan.
 - **`nrow()` and `dim()` don't count rows either.** They report the same partition-metadata total, and `NA` for a view. Editors call `dim()` on every object in the workspace after each command (VS Code's R session watcher does), so a `count(*)` there would scan a large table after every line you run. Use `d[, .N]` for an exact count, or to count a view.
+- **`tail()` reads the clustered index backwards.** On a table with a clustered index, the last rows are a seek from the end of the index, as quick as `head()`, and they are the last rows by the index key. A heap, a clustered columnstore index or a view has no such order, so there `tail()` counts the rows and then reads past all but the last few: two full scans of a large table. Use `head()` or `dbdt_sample()` on those.
 - **`dbdt_schema()`, `dbdt_tables()` and the [data model](duckdt-explore.qmd)** read `sys.columns`, `sys.objects` and `sys.indexes` directly. `dbdt_erd()` and `dbdt_data_model()` handle models with tens of thousands of columns in well under a second of R time, and with `row_counts = TRUE` read every table's count from partition metadata in one query. Views are left uncounted, since counting one runs its query on the server.
 
 To find where the time goes in a slow call, turn on tracing. Every statement is printed with how long the server took over it:
@@ -65,7 +66,7 @@ T-SQL draws a line DuckDB doesn't: a comparison is a condition, not a value, so 
 | Feature | DuckDB | SQL Server |
 |:---|:---|:---|
 | `head()` and `print()` | `LIMIT n` | `TOP (n)` |
-| `tail()` | `LIMIT n OFFSET k` | `ORDER BY (SELECT NULL) OFFSET k ROWS FETCH NEXT n ROWS ONLY` |
+| `tail()` | `LIMIT n OFFSET k` | `TOP (n) ... ORDER BY` the clustered index key, reversed, for a table with a clustered index; otherwise `ORDER BY (SELECT NULL) OFFSET k ROWS FETCH NEXT n ROWS ONLY` after a `count(*)` |
 | `dbdt_sample()` | `USING SAMPLE reservoir(n ROWS)` | `ORDER BY NEWID()` by default; `method = "fast"` uses approximate page sampling with `TABLESAMPLE SYSTEM` first. |
 | `order()` in `i` | `ORDER BY x NULLS LAST` | `ORDER BY CASE WHEN x IS NULL THEN 1 ELSE 0 END, x`, since T-SQL has no `NULLS LAST` |
 | `%flike%` (literal substring) | `contains()` | `CHARINDEX(...) > 0` |

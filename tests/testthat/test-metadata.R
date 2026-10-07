@@ -138,7 +138,8 @@ test_that("SQL Server dim() reads partition metadata instead of counting", {
   expect_equal(dim(d), c(NA, 2))
   expect_identical(counted, 0L)
 
-  # tail() needs the exact count to compute its offset, so it still counts.
+  # Without a clustered index (this stand-in catalogue has none) tail() needs
+  # the exact count to compute its offset, so it still counts.
   tail(d, 1)
   expect_identical(counted, 1L)
 })
